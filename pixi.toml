@@ -1,0 +1,17 @@
+[workspace]
+authors = ["laurcam <lucas.arcamone@gmail.com>"]
+channels = ["conda-forge"]
+name = "RegistraBIDS"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.11.*"
+pybids = ">=0.22.0,<0.23"
+nibabel = ">=5.4.0,<6"
+numpy = ">=2.4.3,<3"
+scipy = ">=1.17.1,<2"
+click = ">=8.3.3,<9"
+rich = ">=15.0.0,<16"
