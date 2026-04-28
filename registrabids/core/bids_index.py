@@ -9,3 +9,10 @@ class BIDSIndex:
 
     def get_derivatives(self):
         return self.layout.get(scope="derivatives")
+    
+    def get_qmri_maps(self):
+        return self.layout.get(
+        scope="derivatives/qmri",
+        suffix=None,
+        extension=[".nii", ".nii.gz"]
+        )
