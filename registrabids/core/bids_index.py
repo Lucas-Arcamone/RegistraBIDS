@@ -39,3 +39,19 @@ class BIDSIndex:
             grouped[key].append(f)
 
         return grouped
+    
+    def map_to_sources(self, subjects=None, sessions=None):
+        files = self.get_qmri_maps(subjects, sessions)
+
+        mapping = {}
+
+        for f in files:
+            metadata = f.get_metadata()
+            srcs = metadata.get("Sources", [])
+
+            if isinstance(srcs, str):
+                srcs = [srcs]
+
+            mapping[f.path] = list(set(srcs))
+
+        return mapping
