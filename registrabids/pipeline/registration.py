@@ -57,8 +57,6 @@ def register_to_template(fixed,
             check=True
         )
 
-
-
 def register_to_reference(fixed, 
                           moving, 
                           out_prefix, 

@@ -1,5 +1,6 @@
 from bids import BIDSLayout
 from collections import defaultdict
+from registrabids.config import load_config
 
 class BIDSIndex:
     def __init__(self, root):
@@ -55,3 +56,4 @@ class BIDSIndex:
             mapping[f.path] = list(set(srcs))
 
         return mapping
+    
