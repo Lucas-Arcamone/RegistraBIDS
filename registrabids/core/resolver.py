@@ -139,10 +139,10 @@ class RegistrationPlanner:
         source_map: dict,     # {qmap_path: [source_path, ...]}
     ) -> SessionPlan:
         """
-        Construit le plan complet pour un (sub, ses) :
+        Build the complete plan for a (sub, ses):
           - 1 job ref → template
-          - N jobs source_i → ref  (dédupliqués par source)
-          - M apply jobs (une par qmap)
+          - N jobs source_i → ref  (deduplicated by source)
+          - M apply jobs (one per qmap)
         """
         out_base = (
             self.output_root
@@ -177,7 +177,7 @@ class RegistrationPlanner:
 
             if not sources:
                 logger.warning(
-                    "Aucune source trouvée pour %s — qmap ignorée.",
+                    "No source found for %s — qmap ignored.",
                     Path(qmap_path).name,
                 )
                 continue
@@ -186,6 +186,7 @@ class RegistrationPlanner:
             source_path = Path(sources[0])
             key = _source_key(str(source_path))
 
+            # avoid registration job already planned because several qmri can have the same source.
             if key not in seen_sources:
                 seen_sources[key] = source_path
                 plan.registration_jobs.append(

@@ -2,19 +2,19 @@
 import subprocess
 import logging
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────
-# Dataclasses — représentent une stage ANTs
+# Dataclasses — represent an ANTs stage
 # ─────────────────────────────────────────
 
 @dataclass
 class MetricConfig:
-    name: str                        # MI, Mattes, CC, MeanSquares
+    name: str                        # MI, Mattes, otherwise CC, MeanSquares have radius 
     weight: float = 1.0
     bins: int = 32
     sampling: str = "Regular"        # Regular, Random, None
