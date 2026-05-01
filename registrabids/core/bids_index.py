@@ -4,7 +4,8 @@ from collections import defaultdict
 class BIDSIndex:
     def __init__(self, root):
         self.layout = BIDSLayout(root,
-                                 derivatives=[f"{root}/derivatives/qmri"])
+                                 derivatives=[f"{root}/derivatives/qmri"], 
+                                 validate = False)
 
     def get_subjects(self):
         return self.layout.get_subjects()
@@ -12,7 +13,9 @@ class BIDSIndex:
     def get_derivatives(self):
         return self.layout.get(scope="derivatives")
 
-    def get_qmri_maps(self, subjects=None, sessions=None, suffixes=None):
+#need to remove subjects, sessions and suffixes inputs and replace with config:dict
+# reuse code from resolver ReferenceResolver  
+    def get_qmri_maps(self, subjects=None, sessions=None, suffixes=None): 
         query = {
             "scope": "qmri",
             "extension": [".nii", ".nii.gz"]
