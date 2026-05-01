@@ -56,7 +56,7 @@ class ReferenceResolver:
                     sub, ses, candidates[0].filename,
                 )
 
-            reference_map[(sub, ses)] = [candidates[0].filename]
+            reference_map[(sub, ses)] = Path(candidates[0].path)
             logger.debug("Reference sub-%s ses-%s : %s", sub, ses, candidates[0].filename)
 
         if errors:

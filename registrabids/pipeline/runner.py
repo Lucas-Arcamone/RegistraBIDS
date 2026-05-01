@@ -110,22 +110,14 @@ def run_pipeline(bids_root: str, config: dict) -> None:
     source_map = index.map_to_sources(config)
 
     for (sub, ses), qmri_files in grouped.items():
-        ref_filename = reference_map.get((sub, ses))
-        if not ref_filename:
+        ref_path = reference_map.get((sub, ses))
+        if not ref_path:
             logger.warning("Pas de référence pour sub-%s ses-%s, session ignorée.", sub, ses)
             continue
 
-        # Reconstruire le path complet depuis le layout
-        ref_candidates = index.layout.get(
-            subject=sub, session=ses,
-            filename=ref_filename[0],
-            extension=[".nii", ".nii.gz"],
-        )
-        if not ref_candidates:
-            logger.error("Fichier ref introuvable dans le layout : %s", ref_filename[0])
+        if not ref_path:
+            logger.error("Fichier ref introuvable dans le layout : %s", ref_path[0])
             continue
-
-        ref_path = Path(ref_candidates[0].path)
 
         plan = planner.build_session_plan(
             subject=sub,
@@ -135,7 +127,7 @@ def run_pipeline(bids_root: str, config: dict) -> None:
             source_map=source_map,
         )
 
-        try:
+        """try:
             run_session(
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
@@ -143,4 +135,4 @@ def run_pipeline(bids_root: str, config: dict) -> None:
             )
         except RuntimeError as e:
             logger.error("Erreur sub-%s ses-%s : %s", sub, ses, e)
-            continue
+            continue"""
