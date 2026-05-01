@@ -105,13 +105,9 @@ def run_pipeline(bids_root: str, config: dict) -> None:
     output_root = Path(bids_root) / "derivatives" / "registrabids"
     planner = RegistrationPlanner(index.layout, template, output_root)
 
-    reference_map = resolver.extract_reference_map(
-        config_path=config["_config_path"],   # path du YAML passé au runner
-        subjects=config.get("subjects"),
-        sessions=config.get("sessions"),
-    )
-    grouped = index.get_qmri_maps_grouped()
-    source_map = index.map_to_sources()
+    reference_map = resolver.extract_reference_map(config)
+    grouped = index.get_qmri_maps_grouped(config)
+    source_map = index.map_to_sources(config)
 
     for (sub, ses), qmri_files in grouped.items():
         ref_filename = reference_map.get((sub, ses))

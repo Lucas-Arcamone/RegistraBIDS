@@ -1,11 +1,17 @@
 from bids import BIDSLayout
 from collections import defaultdict
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class BIDSIndex:
     def __init__(self, root):
-        self.layout = BIDSLayout(root,
-                                 derivatives=[f"{root}/derivatives/qmri"], 
-                                 validate = False)
+        self.layout = BIDSLayout(
+            root,
+            derivatives=[f"{root}/derivatives/qmri"],
+            validate=False
+        )
 
     def get_subjects(self):
         return self.layout.get_subjects()
@@ -13,9 +19,19 @@ class BIDSIndex:
     def get_derivatives(self):
         return self.layout.get(scope="derivatives")
 
-#need to remove subjects, sessions and suffixes inputs and replace with config:dict
-# reuse code from resolver ReferenceResolver  
-    def get_qmri_maps(self, subjects=None, sessions=None, suffixes=None): 
+    # ─────────────────────────────────────────
+    # MÉTHODES PRINCIPALES — basées sur config
+    # ─────────────────────────────────────────
+
+    def get_qmri_maps(self, config: dict, suffixes=None):
+        """
+        Récupère les qmri maps filtrées selon config['filter'] si présent.
+        suffixes : optionnel pour filtrer par suffix (ex: ['MTRmap', 'MTsat'])
+        """
+        filter_cfg = config.get("filter", {})
+        subjects = filter_cfg.get("subjects")
+        sessions = filter_cfg.get("sessions")
+
         query = {
             "scope": "qmri",
             "extension": [".nii", ".nii.gz"]
@@ -23,39 +39,62 @@ class BIDSIndex:
 
         if subjects is not None:
             query["subject"] = subjects
-
         if sessions is not None:
             query["session"] = sessions
-
         if suffixes is not None:
             query["suffix"] = suffixes
 
-        return self.layout.get(**query)    
+        files = self.layout.get(**query)
 
-    def get_qmri_maps_grouped(self, subjects=None, sessions=None):
-        files = self.get_qmri_maps(subjects, sessions)
+        # Filtre les fichiers sans subject/session (dataset-level)
+        valid_files = [
+            f for f in files
+            if f.entities.get("subject") is not None
+            and f.entities.get("session") is not None
+        ]
 
+        if len(valid_files) < len(files):
+            logger.debug(
+                "%d fichier(s) qmri sans subject/session ignoré(s)",
+                len(files) - len(valid_files)
+            )
+
+        return valid_files
+
+    def get_qmri_maps_grouped(self, config: dict):
+        """
+        Retourne les qmri maps groupées par (subject, session).
+        {('M30', '01'): [BIDSImageFile, ...], ...}
+        """
+        files = self.get_qmri_maps(config)
         grouped = defaultdict(list)
 
         for f in files:
-            key = (f.entities.get("subject"), f.entities.get("session"))
-            grouped[key].append(f)
+            sub = f.entities.get("subject")
+            ses = f.entities.get("session")
+            # Déjà filtré dans get_qmri_maps, mais guard par sécurité
+            if sub is not None and ses is not None:
+                grouped[(sub, ses)].append(f)
 
+        logger.info(
+            "%d couple(s) (sub, ses) avec qmri maps trouvé(s)",
+            len(grouped)
+        )
         return grouped
-    
-    def map_to_sources(self, subjects=None, sessions=None):
-        files = self.get_qmri_maps(subjects, sessions)
 
+    def map_to_sources(self, config: dict):
+        """
+        Retourne le mapping {qmap_path: [source_path, ...]}.
+        """
+        files = self.get_qmri_maps(config)
         mapping = {}
 
         for f in files:
             metadata = f.get_metadata()
             srcs = metadata.get("Sources", [])
-
             if isinstance(srcs, str):
                 srcs = [srcs]
-
             mapping[f.path] = list(set(srcs))
 
+        logger.debug("%d qmap(s) avec sources extraites", len(mapping))
         return mapping
-    
