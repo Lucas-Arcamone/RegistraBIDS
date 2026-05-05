@@ -185,7 +185,7 @@ class RegistrationPlanner:
             # On prend la première source (en pratique il n'y en a qu'une)
             source_path = Path(sources[0])
             key = _source_key(str(source_path))
-
+            # Need to create an other variable to handle the prefix because key is a path-- it will not work with output_prefix
             # avoid registration job already planned because several qmri can have the same source.
             if key not in seen_sources:
                 seen_sources[key] = source_path

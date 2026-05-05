@@ -1,6 +1,7 @@
 # pipeline/registration.py
 import subprocess
 import logging
+import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -114,7 +115,7 @@ def parse_registration_config(reg_cfg: dict) -> RegistrationConfig:
 
 
 # ─────────────────────────────────────────
-# Builder de commande ANTs
+# ANTs Command Builder
 # ─────────────────────────────────────────
 
 def _build_command(
@@ -129,6 +130,7 @@ def _build_command(
     cmd = [
         "antsRegistration",
         "-d", str(config.dimensionality),
+        "--float", "0",
         "-o", f"[{out_prefix},{warped},{inv_warped}]",
     ]
 
@@ -149,7 +151,31 @@ def _build_command(
 
     return cmd
 
+def _ants_env() -> dict:
+    """
+    Environment variables to force gzip compression in ANTs output.
+    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: stability
+    ANTS_RANDOM_SEED: reproducibility
+    """
+    env = os.environ.copy()
+    env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = "1"
+    env["ANTS_RANDOM_SEED"] = "42"
+    return env
 
+
+def _verify_nifti(path: Path) -> None:
+    """Verifies that a .nii.gz file is a valid gzip file."""
+    import gzip
+    if not path.exists():
+        raise RuntimeError(f"Missing ANTs output file : {path}")
+    try:
+        with gzip.open(path, "rb") as f:
+            f.read(4)   # lit juste le header gzip
+    except gzip.BadGzipFile:
+        raise RuntimeError(
+            f"The ANTs output file is not a valid gzip file: {path}\n"
+            f"Check the associated ANTs log."
+        )
 # ─────────────────────────────────────────
 # Fonction principale
 # ─────────────────────────────────────────
@@ -162,8 +188,8 @@ def run_registration(
     log_file: Optional[Path] = None,
 ) -> dict[str, Path]:
     """
-    Lance antsRegistration selon la config fournie.
-    Retourne les paths des outputs (warped, inv_warped, transforms).
+    Run antsRegistration based on the provided configuration.
+    Returns the paths of the outputs (warped, inv_warped, transforms).
     """
     fixed = Path(fixed)
     moving = Path(moving)
@@ -173,9 +199,9 @@ def run_registration(
     log_file = log_file or out_prefix.with_suffix(".log")
 
     cmd = _build_command(str(fixed), str(moving), str(out_prefix), config)
-
-    logger.info("Lancement ANTs : %s → %s", moving.name, fixed.name)
-    logger.debug("Commande : %s", " ".join(cmd))
+    
+    logger.info("Run ANTs : %s → %s", moving.name, fixed.name)
+    logger.debug("Command : %s", " ".join(cmd))
 
     with open(log_file, "w") as f:
         f.write(" ".join(cmd) + "\n\n")
@@ -183,14 +209,19 @@ def run_registration(
             cmd,
             stdout=f,
             stderr=subprocess.STDOUT,
+            env=_ants_env(),  
         )
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"antsRegistration a échoué (code {result.returncode}). "
-            f"Voir le log : {log_file}"
+            f"antsRegistration failed (code {result.returncode}). "
+            f"See log file : {log_file}"
         )
-
+    
+    # Vérifie que les fichiers de sortie sont bien là et lisibles
+    warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
+    _verify_nifti(warped)
+    
     return {
         "warped": out_prefix.parent / f"{out_prefix.name}_warped.nii.gz",
         "inv_warped": out_prefix.parent / f"{out_prefix.name}_inv_warped.nii.gz",

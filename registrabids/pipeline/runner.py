@@ -44,9 +44,9 @@ def run_session(
     reg_config_qmri: dict,       # bloc YAML registration.ref_to_qmri
 ) -> None:
     """
-    Exécute le plan complet pour une session :
-      1. Recalages (ref→template, sources→ref)
-      2. Application des transforms chaînées sur chaque qmap
+    Execute the complete plan for a session :
+      1. Registration (ref→template, sources→ref)
+      2. Applying successive transforms to each qmap
     """
     config_template = parse_registration_config(reg_config_template)
     config_qmri = parse_registration_config(reg_config_qmri)
@@ -63,7 +63,7 @@ def run_session(
             config=cfg,
         )
         transform_prefixes[job.source_key] = result["prefix"]
-        logger.info("✓ %s terminé", job.source_key)
+        logger.info("✓ %s done", job.source_key)
 
     # ── Application des transforms ───────────────────────────────────────
     prefix_template = transform_prefixes["ref"]
@@ -72,12 +72,12 @@ def run_session(
         prefix_source = transform_prefixes.get(app_job.source_key)
         if prefix_source is None:
             logger.error(
-                "Pas de transform trouvé pour source_key='%s', qmap ignorée : %s",
+                "No transform found for source_key='%s', qmap ignored : %s",
                 app_job.source_key, app_job.qmap.name,
             )
             continue
 
-        # Chaîne ANTs : du plus récent au plus ancien
+        # ANTs order: from newest to oldest
         # T(ref→template) ∘ T(source→ref)
         transforms = [
             f"{prefix_template}1Warp.nii.gz",       # warp SyN
@@ -87,14 +87,14 @@ def run_session(
         _apply_transforms(app_job, transforms)
 
     logger.info(
-        "Session sub-%s ses-%s terminée — %d qmaps dans l'espace template.",
+        "Session sub-%s ses-%s done — %d qmaps in the template space.",
         plan.subject, plan.session, len(plan.apply_jobs),
     )
 
 def run_pipeline(bids_root: str, config: dict) -> None:
     """
-    Point d'entrée principal.
-    config : dict issu du YAML complet.
+    Main entry point.
+    config: a dictionary derived from the full YAML file.
     """
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
@@ -112,11 +112,11 @@ def run_pipeline(bids_root: str, config: dict) -> None:
     for (sub, ses), qmri_files in grouped.items():
         ref_path = reference_map.get((sub, ses))
         if not ref_path:
-            logger.warning("Pas de référence pour sub-%s ses-%s, session ignorée.", sub, ses)
+            logger.warning("No reference for sub-%s ses-%s, session ignored.", sub, ses)
             continue
 
         if not ref_path:
-            logger.error("Fichier ref introuvable dans le layout : %s", ref_path[0])
+            logger.error("Reference file not found in the layout : %s", ref_path[0])
             continue
 
         plan = planner.build_session_plan(
@@ -126,13 +126,13 @@ def run_pipeline(bids_root: str, config: dict) -> None:
             qmri_files=qmri_files,
             source_map=source_map,
         )
-
-        """try:
+        #print(plan.registration_jobs)
+        try:
             run_session(
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
                 reg_config_qmri=config["registration"]["ref_to_qmri"],
             )
         except RuntimeError as e:
-            logger.error("Erreur sub-%s ses-%s : %s", sub, ses, e)
-            continue"""
+            logger.error("Error sub-%s ses-%s : %s", sub, ses, e)
+            continue
