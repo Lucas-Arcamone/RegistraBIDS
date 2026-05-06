@@ -4,6 +4,7 @@ import logging
 from registrabids.core.planner import (
     SessionPlan, RegistrationJob, ApplyTransformJob
 )
+from registrabids.pipeline.preprocessing import build_preprocessing_plan
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ class RegistrationPlanner:
         ref: Path,
         qmri_files,           # liste de BIDSImageFile
         source_map: dict,     # {qmap_path: [source_path, ...]}
+        preproc_config: dict,
     ) -> SessionPlan:
         """
         Build the complete plan for a (sub, ses):
@@ -212,7 +214,27 @@ class RegistrationPlanner:
                 )
             )
 
-        self._log_plan(plan)
+        if preproc_config:
+            # Plan pour la référence
+            ref_entities = self._entities_from_path(ref)  # voir helper ci-dessous
+            plan.preprocessing_plans["ref"] = build_preprocessing_plan(
+                source_key="ref",
+                file_path=ref,
+                entities=ref_entities,
+                preproc_config=preproc_config,
+                out_base=out_base,
+            )
+            # Plan pour chaque source unique
+            for key, source_path in seen_sources.items():
+                src_entities = self._entities_from_path(source_path)
+                plan.preprocessing_plans[key] = build_preprocessing_plan(
+                    source_key=key,
+                    file_path=source_path,
+                    entities=src_entities,
+                    preproc_config=preproc_config,
+                    out_base=out_base,
+                )        
+                self._log_plan(plan)
         return plan
 
     def _log_plan(self, plan: SessionPlan) -> None:
@@ -235,3 +257,7 @@ class RegistrationPlanner:
                 app.qmap.name,
                 app.source_key,
             )
+
+    def _entities_from_path(path: Path) -> dict:
+        from bids.layout import parse_file_entities
+        return parse_file_entities(str(path))

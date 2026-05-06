@@ -7,7 +7,7 @@ from registrabids.pipeline.registration import (
     run_registration, parse_registration_config
 )
 from registrabids.core.template import TemplateLoader
-
+from registrabids.pipeline.preprocessing import run_preprocessing_plan
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +41,8 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
 def run_session(
     plan: SessionPlan,
     reg_config_template: dict,   # bloc YAML registration.ref_to_template
-    reg_config_qmri: dict,       # bloc YAML registration.ref_to_qmri
+    reg_config_qmri: dict,      # bloc YAML registration.ref_to_qmri 
+    preproc_config=None,
 ) -> None:
     """
     Execute the complete plan for a session :
@@ -51,14 +52,26 @@ def run_session(
     config_template = parse_registration_config(reg_config_template)
     config_qmri = parse_registration_config(reg_config_qmri)
 
+    # Preprocessing 
+    preprocessed: dict[str, Path] = {}
+
+    for source_key, preproc_plan in plan.preprocessing_plans.items():
+        preprocessed[source_key] = run_preprocessing_plan(preproc_plan)
+
+    # Fallback si pas de preprocessing configuré
+    preprocessed.setdefault("ref", plan.ref)
+
     # Stocke les prefixes de output par source_key pour récupérer les transforms
     transform_prefixes: dict[str, Path] = {}
 
     for job in plan.registration_jobs:
+        fixed = preprocessed.get("ref", job.fixed) if job.job_type == "ref_to_template" else preprocessed.get("ref", job.fixed)
+        moving = preprocessed.get(job.source_key, job.moving)
+
         cfg = config_template if job.job_type == "ref_to_template" else config_qmri
         result = run_registration(
-            fixed=job.fixed,
-            moving=job.moving,
+            fixed=fixed,
+            moving=moving,
             out_prefix=job.out_prefix,
             config=cfg,
         )
@@ -118,6 +131,8 @@ def run_pipeline(bids_root: str, config: dict) -> None:
         if not ref_path:
             logger.error("Reference file not found in the layout : %s", ref_path[0])
             continue
+        
+        preproc_config = config.get("preprocessing")
 
         plan = planner.build_session_plan(
             subject=sub,
@@ -125,6 +140,7 @@ def run_pipeline(bids_root: str, config: dict) -> None:
             ref=ref_path,
             qmri_files=qmri_files,
             source_map=source_map,
+            preproc_config=preproc_config,
         )
         #print(plan.registration_jobs)
         try:
@@ -132,6 +148,7 @@ def run_pipeline(bids_root: str, config: dict) -> None:
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
                 reg_config_qmri=config["registration"]["ref_to_qmri"],
+                preproc_config=preproc_config,
             )
         except RuntimeError as e:
             logger.error("Error sub-%s ses-%s : %s", sub, ses, e)
