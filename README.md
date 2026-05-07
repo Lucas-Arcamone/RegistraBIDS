@@ -98,6 +98,42 @@ reference:
 
 template:
   atlas: ABAv3
+  
+preprocessing:
+  save_intermediates:
+    extraction: false
+    denoising: false
+    n4: false
+
+  volume_extraction:
+    rules:
+      - match: {suffix: T1w, acquisition: flash}
+        strategy: mean
+
+      - match: {suffix: T1w, acquisition: refMT}
+        strategy: mean
+
+      - match: {suffix: dwi, acquisition: ogse}
+        strategy: geometric_mean_shell
+        params:
+          target_bval: 0
+
+      - match: {suffix: bold}
+        strategy: weighted_mean_echo
+  
+  n4:
+    enabled: true
+    skip_suffixes: [dwi]        # ← N4 jamais appliqué sur ces suffixes
+    shrink_factor: 4
+    n_iterations: [50, 50, 30, 20]
+    convergence_threshold: 0.001
+
+  denoising:
+    enabled: true
+    method: NLMF                # NLMF | MPPCA
+    noise_model: rician         # rician | gaussian
+    patch_radius: 1
+    search_radius: 3
 
 registration:
   ref_to_template:
@@ -167,6 +203,7 @@ If `filter` is absent, all subjects and sessions in the dataset are processed.
 | `filter.sessions` | ❌ | List of session IDs to process. If absent: all sessions |
 
 ---
+
 
 ## Running the pipeline
 

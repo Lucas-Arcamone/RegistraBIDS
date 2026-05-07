@@ -258,6 +258,7 @@ class RegistrationPlanner:
                 app.source_key,
             )
 
+    @staticmethod
     def _entities_from_path(path: Path) -> dict:
         from bids.layout import parse_file_entities
         return parse_file_entities(str(path))

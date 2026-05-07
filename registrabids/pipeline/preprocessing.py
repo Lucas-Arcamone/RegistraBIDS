@@ -291,20 +291,31 @@ def run_denoising(job: DenoisingJob) -> None:
 
 
 def run_n4(job: N4Job) -> None:
-    import ants
+    import subprocess
 
-    img = ants.image_read(str(job.input_path))
-    corrected = ants.n4_bias_field_correction(
-        img,
-        shrink_factor=job.shrink_factor,
-        convergence={
-            "iters": job.n_iterations,
-            "tol": job.convergence_threshold,
-        },
-    )
-    ants.image_write(corrected, str(job.output_path))
+    job.output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "N4BiasFieldCorrection",
+        "-d", "3",
+        "-i", str(job.input_path),
+        "-o", str(job.output_path),
+        "-s", str(job.shrink_factor),
+        "-c", f"[{'x'.join(str(i) for i in job.n_iterations)},{job.convergence_threshold}]",
+    ]
+
+    logger.info("N4BiasFieldCorrection : %s", job.input_path.name)
+    logger.debug("Commande : %s", " ".join(cmd))
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"N4BiasFieldCorrection failed for {job.input_path.name} :\n"
+            f"{result.stderr}"
+        )
+
     logger.info("N4 → %s", job.output_path.name)
-
 
 def run_preprocessing_plan(plan: PreprocessingPlan) -> Path:
     """
