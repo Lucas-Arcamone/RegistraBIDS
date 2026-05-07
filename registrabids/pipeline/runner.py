@@ -65,8 +65,13 @@ def run_session(
     transform_prefixes: dict[str, Path] = {}
 
     for job in plan.registration_jobs:
-        fixed = preprocessed.get("ref", job.fixed) if job.job_type == "ref_to_template" else preprocessed.get("ref", job.fixed)
-        moving = preprocessed.get(job.source_key, job.moving)
+        if job.job_type == "ref_to_template":
+            fixed = job.fixed        # template — inchangé, jamais préprocessé
+            moving = preprocessed.get("ref", job.moving)   # ref préprocessée
+        else:
+            # source_to_ref
+            fixed = preprocessed.get("ref", job.fixed)     # ref préprocessée
+            moving = preprocessed.get(job.source_key, job.moving)  # source préprocessée
 
         cfg = config_template if job.job_type == "ref_to_template" else config_qmri
         result = run_registration(

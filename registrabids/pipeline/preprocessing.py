@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _save_nifti_safe(img: nib.Nifti1Image, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     nib.save(img, dest)
-    logger.debug("Sauvegarde → %s", dest.name)
+    logger.debug("Save → %s", dest.name)
 
 # ─────────────────────────────────────────
 # Parsers — config → dataclasses
