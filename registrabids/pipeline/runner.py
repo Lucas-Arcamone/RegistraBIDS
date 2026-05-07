@@ -104,18 +104,24 @@ def run_session(
         plan.subject, plan.session, len(plan.apply_jobs),
     )
 
-def run_pipeline(bids_root: str, config: dict) -> None:
+def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None) -> None:
     """
     Main entry point.
     config: a dictionary derived from the full YAML file.
     """
+    output_root = (
+        Path(output_dir)
+        if output_dir
+        else Path(bids_root) / "derivatives" / "registrabids"
+    )
+
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
     
     atlas = TemplateLoader.from_config(config["template"])
     template = atlas.template
 
-    output_root = Path(bids_root) / "derivatives" / "registrabids"
+    #output_root = Path(bids_root) / "derivatives" / "registrabids"
     planner = RegistrationPlanner(index.layout, template, output_root)
 
     reference_map = resolver.extract_reference_map(config)

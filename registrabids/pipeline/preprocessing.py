@@ -1,15 +1,25 @@
 from __future__ import annotations
 import logging
+import shutil
 import tempfile
 from registrabids.core.planner import (VolumeExtractionJob, DenoisingJob, N4Job, PreprocessingPlan)
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import nibabel as nib
 
 logger = logging.getLogger(__name__)
 
+
+
+# ─────────────────────────────────────────
+# Utils
+# ─────────────────────────────────────────
+
+def _save_nifti_safe(img: nib.Nifti1Image, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(img, dest)
+    logger.debug("Sauvegarde → %s", dest.name)
 
 # ─────────────────────────────────────────
 # Parsers — config → dataclasses
@@ -41,6 +51,12 @@ def _resolve_strategy(
     )
     return "first_volume", {}
 
+def _clean_stem(path: Path) -> str:
+    name = path.name
+    for ext in (".nii.gz", ".nii"):
+        if name.endswith(ext):
+            return name[: -len(ext)]
+    return path.stem
 
 def build_preprocessing_plan(
     source_key: str,
@@ -63,6 +79,7 @@ def build_preprocessing_plan(
 
     jobs = []
     current_path = file_path
+    stem = _clean_stem(file_path)
 
     # ── Étape 1 : extraction 3D si nécessaire ───────────────────────────
     img = nib.load(file_path)
@@ -74,9 +91,9 @@ def build_preprocessing_plan(
         save_extraction = save_cfg.get("extraction", False)
 
         if save_extraction:
-            ext_out = preproc_dir / f"{file_path.stem}_extracted.nii.gz"
+            ext_out = preproc_dir / f"{stem}_extracted.nii.gz"
         else:
-            ext_out = Path(tempfile.mktemp(suffix="_extracted.nii.gz"))
+            ext_out = _temp_nifti("_extracted.nii.gz")
 
         job = VolumeExtractionJob(
             input_path=current_path,
@@ -93,9 +110,9 @@ def build_preprocessing_plan(
         save_denoising = save_cfg.get("denoising", False)
 
         if save_denoising:
-            den_out = preproc_dir / f"{file_path.stem}_denoised.nii.gz"
+            den_out = preproc_dir / f"{stem}_denoised.nii.gz"
         else:
-            den_out = Path(tempfile.mktemp(suffix="_denoised.nii.gz"))
+            den_out = _temp_nifti("_denoised.nii.gz")
 
         job = DenoisingJob(
             input_path=current_path,
@@ -117,9 +134,9 @@ def build_preprocessing_plan(
         save_n4 = save_cfg.get("n4", False)
 
         if save_n4:
-            n4_out = preproc_dir / f"{file_path.stem}_N4.nii.gz"
+            n4_out = preproc_dir / f"{stem}_N4.nii.gz"
         else:
-            n4_out = Path(tempfile.mktemp(suffix="_N4.nii.gz"))
+            n4_out = _temp_nifti("_N4.nii.gz")
 
         job = N4Job(
             input_path=current_path,
@@ -171,7 +188,7 @@ def run_volume_extraction(job: VolumeExtractionJob) -> None:
         )
 
     out_img = nib.Nifti1Image(vol.astype(np.float32), img.affine, img.header)
-    nib.save(out_img, job.output_path)
+    _save_nifti_safe(out_img, job.output_path)
     logger.info("Extraction [%s] → %s", strategy, job.output_path.name)
 
 
@@ -261,14 +278,28 @@ def _weighted_mean_echo(file_path: Path, data: np.ndarray) -> np.ndarray:
 
 
 def run_denoising(job: DenoisingJob) -> None:
-    from dipy.denoise.nlmeans import nlmeans
-    from dipy.denoise.noise_estimate import estimate_sigma
-    from dipy.denoise.localpca import mppca
-
     img = nib.load(job.input_path)
     data = np.asarray(img.dataobj, dtype=np.float64)
+    
+    if img.ndim == 4:
+        raise RuntimeError(
+            f"run_denoising a reçu un volume 4D : {job.input_path.name}."
+        )
+    
+    # Garantit que le dossier de destination existe
+    job.output_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.debug(
+        "Output path : %s (parent exists=%s)",
+        job.output_path,
+        job.output_path.parent.exists(),
+    )
+    
+    data = np.asarray(img.dataobj, dtype=np.float32)
 
     if job.method == "NLMF":
+        from dipy.denoise.nlmeans import nlmeans
+        from dipy.denoise.noise_estimate import estimate_sigma
+        from dipy.denoise.localpca import mppca
         sigma = estimate_sigma(data, N=1)
         denoised = nlmeans(
             data,
@@ -278,6 +309,7 @@ def run_denoising(job: DenoisingJob) -> None:
             rician=job.noise_model == "rician",
         )
     elif job.method == "MPPCA":
+        from dipy.denoise.localpca import mppca
         denoised, _ = mppca(data, patch_radius=job.patch_radius, return_sigma=True)
     else:
         raise ValueError(
@@ -286,7 +318,7 @@ def run_denoising(job: DenoisingJob) -> None:
         )
 
     out_img = nib.Nifti1Image(denoised.astype(np.float32), img.affine, img.header)
-    nib.save(out_img, job.output_path)
+    _save_nifti_safe(out_img, job.output_path)
     logger.info("Débruitage [%s/%s] → %s", job.method, job.noise_model, job.output_path.name)
 
 
@@ -316,6 +348,12 @@ def run_n4(job: N4Job) -> None:
         )
 
     logger.info("N4 → %s", job.output_path.name)
+
+def _temp_nifti(suffix: str) -> Path:
+    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_", dir="/tmp"))
+    out = tmp_dir / f"tmp{suffix}"
+    logger.debug("Fichier temporaire prévu : %s (dir exists=%s)", out, tmp_dir.exists())
+    return out
 
 def run_preprocessing_plan(plan: PreprocessingPlan) -> Path:
     """
