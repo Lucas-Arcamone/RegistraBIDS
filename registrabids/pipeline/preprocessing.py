@@ -195,15 +195,16 @@ def run_volume_extraction(job: VolumeExtractionJob) -> None:
 def _geometric_mean_shell(
     file_path: Path, data: np.ndarray, params: dict
 ) -> np.ndarray:
-    """Moyenne géométrique des volumes d'un shell DWI cible."""
+    """Geometric mean of the volumes if bval >= 50 for a target DWI shell
+    Arithmetic mean if bval < 50."""
     bval_path = file_path.with_suffix("").with_suffix(".bval")
     if not bval_path.exists():
         # Cherche dans le même dossier avec le même stem
         bval_path = file_path.parent / (file_path.name.split(".")[0] + ".bval")
     if not bval_path.exists():
         raise FileNotFoundError(
-            f"Fichier .bval introuvable pour {file_path.name}. "
-            f"Cherché : {bval_path}"
+            f".bval file not found for {file_path.name}. "
+            f"Searched : {bval_path}"
         )
 
     bvals = np.loadtxt(bval_path)
@@ -213,19 +214,27 @@ def _geometric_mean_shell(
 
     if len(indices) == 0:
         raise ValueError(
-            f"Aucun volume trouvé pour b={target} ± {tolerance} "
-            f"dans {bval_path.name}. "
-            f"Valeurs disponibles : {np.unique(bvals).tolist()}"
+            f"No results found for b={target} ± {tolerance} "
+            f"in {bval_path.name}. "
+            f"Available values : {np.unique(bvals).tolist()}"
         )
 
     shell = data[..., indices].astype(np.float64)
-    # Clamp pour éviter log(0)
-    shell = np.clip(shell, 1e-8, None)
-    vol = np.exp(np.mean(np.log(shell), axis=3))
-    logger.debug(
-        "Shell b=%d : %d volume(s) sélectionné(s) (indices %s)",
-        target, len(indices), indices.tolist(),
-    )
+    # If bval = 0 automatically realise Mean extraction
+    # else perform geometric mean on a shell (better contrast)
+    if target < 50:
+        vol = np.mean(shell, axis=3)
+        logger.debug(
+            "Shell b=%d -- Mean strategy: %d selected volume(s) (indices %s)",
+            target, len(indices), indices.tolist(),
+        )
+    else:
+        shell = np.clip(shell, 1e-8, None)
+        vol = np.exp(np.mean(np.log(shell), axis=3))
+        logger.debug(
+            "Shell b=%d : %d selected volume(s) (indices %s)",
+            target, len(indices), indices.tolist(),
+        )
     return vol
 
 
