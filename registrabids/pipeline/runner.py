@@ -17,13 +17,18 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     transforms : liste ordonnée des fichiers de transform à chaîner,
                  du plus récent au plus ancien (convention ANTs).
     """
+    if job.out_path.exists() and job.out_path.stat().st_size > 0:
+        logger.info("Skip apply — output déjà existant : %s", job.out_path.name)
+        return
+    
     import subprocess
     job.out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "antsApplyTransforms",
         "-d", "3",
+        "-e", "3",
         "-i", str(job.qmap),
-        "-r", str(job.out_path),   # référence = espace cible (template)
+        "-r", str(job.space_ref),   
         "-o", str(job.out_path),
         "--interpolation", "Linear",
     ]
@@ -31,6 +36,8 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
         cmd += ["-t", t]
 
     logger.info("Applying transforms → %s", job.out_path.name)
+    logger.debug("Command : %s", " ".join(cmd))
+
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -42,6 +49,7 @@ def run_session(
     plan: SessionPlan,
     reg_config_template: dict,   # bloc YAML registration.ref_to_template
     reg_config_qmri: dict,      # bloc YAML registration.ref_to_qmri 
+    force: bool = False,
 ) -> None:
     """
     Execute the complete plan for a session :
@@ -78,6 +86,7 @@ def run_session(
             moving=moving,
             out_prefix=job.out_prefix,
             config=cfg,
+            force=force,
         )
         transform_prefixes[job.source_key] = result["prefix"]
         logger.info("✓ %s done", job.source_key)
@@ -108,7 +117,7 @@ def run_session(
         plan.subject, plan.session, len(plan.apply_jobs),
     )
 
-def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None) -> None:
+def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, force: bool = False) -> None:
     """
     Main entry point.
     config: a dictionary derived from the full YAML file.
@@ -158,6 +167,7 @@ def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None) 
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
                 reg_config_qmri=config["registration"]["ref_to_qmri"],
+                force=force,
             )
         except RuntimeError as e:
             logger.error("Error sub-%s ses-%s : %s", sub, ses, e)
