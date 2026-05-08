@@ -237,12 +237,12 @@ def _geometric_mean_shell(
         )
     return vol
 
-
+#Designed for MEGRE but may be applied to MESE ?  
 def _weighted_mean_echo(file_path: Path, data: np.ndarray) -> np.ndarray:
     """
-    Moyenne pondérée multi-echo.
-    Poids ∝ TE × exp(-TE / T2*_estimate).
-    TE lus depuis le JSON sidecar (liste ou valeur unique).
+    Weighted multi-echo average.
+    Weight ∝ TE × exp(-TE / T2*_estimate).
+    TE values read from the JSON sidecar (list or single value).
     """
     import json
 
@@ -251,7 +251,7 @@ def _weighted_mean_echo(file_path: Path, data: np.ndarray) -> np.ndarray:
         json_path = file_path.parent / (file_path.name.split(".")[0] + ".json")
     if not json_path.exists():
         logger.warning(
-            "JSON sidecar introuvable pour %s — fallback mean", file_path.name
+            "JSON sidecar not found for %s — fallback mean", file_path.name
         )
         return np.mean(data, axis=3)
 
@@ -260,7 +260,7 @@ def _weighted_mean_echo(file_path: Path, data: np.ndarray) -> np.ndarray:
 
     echo_times = meta.get("EchoTime", None)
     if echo_times is None:
-        logger.warning("EchoTime absent du sidecar — fallback mean")
+        logger.warning("EchoTime is not available on the sidecar — fallback mean")
         return np.mean(data, axis=3)
 
     if isinstance(echo_times, (int, float)):
@@ -271,17 +271,17 @@ def _weighted_mean_echo(file_path: Path, data: np.ndarray) -> np.ndarray:
 
     if len(echo_times) != n_echoes:
         logger.warning(
-            "Nombre d'EchoTime (%d) ≠ nombre de volumes (%d) — fallback mean",
+            "Number of EchoTime (%d) ≠ number of volumes (%d) — fallback mean",
             len(echo_times), n_echoes,
         )
         return np.mean(data, axis=3)
 
-    # Estimation naïve de T2* : 40% du TE max
+    # Simple estimate of T2*: 40% of T_E max
     t2star_estimate = 0.4 * echo_times.max()
     weights = echo_times * np.exp(-echo_times / t2star_estimate)
     weights /= weights.sum()
 
-    logger.debug("Poids multi-echo : %s", np.round(weights, 3).tolist())
+    logger.debug("Multi-echo weighting : %s", np.round(weights, 3).tolist())
     vol = np.tensordot(data.astype(np.float64), weights, axes=([3], [0]))
     return vol
 
