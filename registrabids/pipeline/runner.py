@@ -7,7 +7,7 @@ from registrabids.pipeline.registration import (
     run_registration, parse_registration_config
 )
 from registrabids.core.template import TemplateLoader
-
+from registrabids.pipeline.preprocessing import run_preprocessing_plan
 logger = logging.getLogger(__name__)
 
 
@@ -17,13 +17,18 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     transforms : liste ordonnée des fichiers de transform à chaîner,
                  du plus récent au plus ancien (convention ANTs).
     """
+    if job.out_path.exists() and job.out_path.stat().st_size > 0:
+        logger.info("Skip apply — output déjà existant : %s", job.out_path.name)
+        return
+    
     import subprocess
     job.out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         "antsApplyTransforms",
         "-d", "3",
+        "-e", "3",
         "-i", str(job.qmap),
-        "-r", str(job.out_path),   # référence = espace cible (template)
+        "-r", str(job.space_ref),   
         "-o", str(job.out_path),
         "--interpolation", "Linear",
     ]
@@ -31,6 +36,8 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
         cmd += ["-t", t]
 
     logger.info("Applying transforms → %s", job.out_path.name)
+    logger.debug("Command : %s", " ".join(cmd))
+
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -41,7 +48,8 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
 def run_session(
     plan: SessionPlan,
     reg_config_template: dict,   # bloc YAML registration.ref_to_template
-    reg_config_qmri: dict,       # bloc YAML registration.ref_to_qmri
+    reg_config_qmri: dict,      # bloc YAML registration.ref_to_qmri 
+    force: bool = False,
 ) -> None:
     """
     Execute the complete plan for a session :
@@ -51,16 +59,34 @@ def run_session(
     config_template = parse_registration_config(reg_config_template)
     config_qmri = parse_registration_config(reg_config_qmri)
 
+    # Preprocessing 
+    preprocessed: dict[str, Path] = {}
+
+    for source_key, preproc_plan in plan.preprocessing_plans.items():
+        preprocessed[source_key] = run_preprocessing_plan(preproc_plan)
+
+    # Fallback si pas de preprocessing configuré
+    preprocessed.setdefault("ref", plan.ref)
+
     # Stocke les prefixes de output par source_key pour récupérer les transforms
     transform_prefixes: dict[str, Path] = {}
 
     for job in plan.registration_jobs:
+        if job.job_type == "ref_to_template":
+            fixed = job.fixed        # template — inchangé, jamais préprocessé
+            moving = preprocessed.get("ref", job.moving)   # ref préprocessée
+        else:
+            # source_to_ref
+            fixed = preprocessed.get("ref", job.fixed)     # ref préprocessée
+            moving = preprocessed.get(job.source_key, job.moving)  # source préprocessée
+
         cfg = config_template if job.job_type == "ref_to_template" else config_qmri
         result = run_registration(
-            fixed=job.fixed,
-            moving=job.moving,
+            fixed=fixed,
+            moving=moving,
             out_prefix=job.out_prefix,
             config=cfg,
+            force=force,
         )
         transform_prefixes[job.source_key] = result["prefix"]
         logger.info("✓ %s done", job.source_key)
@@ -91,18 +117,24 @@ def run_session(
         plan.subject, plan.session, len(plan.apply_jobs),
     )
 
-def run_pipeline(bids_root: str, config: dict) -> None:
+def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, force: bool = False) -> None:
     """
     Main entry point.
     config: a dictionary derived from the full YAML file.
     """
+    output_root = (
+        Path(output_dir)
+        if output_dir
+        else Path(bids_root) / "derivatives" / "registrabids"
+    )
+
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
     
     atlas = TemplateLoader.from_config(config["template"])
     template = atlas.template
 
-    output_root = Path(bids_root) / "derivatives" / "registrabids"
+    #output_root = Path(bids_root) / "derivatives" / "registrabids"
     planner = RegistrationPlanner(index.layout, template, output_root)
 
     reference_map = resolver.extract_reference_map(config)
@@ -118,6 +150,8 @@ def run_pipeline(bids_root: str, config: dict) -> None:
         if not ref_path:
             logger.error("Reference file not found in the layout : %s", ref_path[0])
             continue
+        
+        preproc_config = config.get("preprocessing")
 
         plan = planner.build_session_plan(
             subject=sub,
@@ -125,6 +159,7 @@ def run_pipeline(bids_root: str, config: dict) -> None:
             ref=ref_path,
             qmri_files=qmri_files,
             source_map=source_map,
+            preproc_config=preproc_config,
         )
         #print(plan.registration_jobs)
         try:
@@ -132,6 +167,7 @@ def run_pipeline(bids_root: str, config: dict) -> None:
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
                 reg_config_qmri=config["registration"]["ref_to_qmri"],
+                force=force,
             )
         except RuntimeError as e:
             logger.error("Error sub-%s ses-%s : %s", sub, ses, e)

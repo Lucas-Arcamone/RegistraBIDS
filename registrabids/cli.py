@@ -7,10 +7,9 @@ import yaml
 from registrabids.pipeline.runner import run_pipeline
 
 
-def setup_logging(verbose: bool):
-    level = logging.DEBUG if verbose else logging.INFO
+def setup_logging(log_level: str):
     logging.basicConfig(
-        level=level,
+        level=getattr(logging, log_level.upper()),
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
 
@@ -37,21 +36,39 @@ def load_config(config_path: str) -> dict:
     help="Path to YAML configuration file",
 )
 @click.option(
-    "-v", "--verbose",
-    is_flag=True,
-    help="Enable debug logging",
+    "--output-dir",
+    "output_dir",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for derivatives. Defaults to <bids_root>/derivatives/registrabids/",
 )
-def main(bids_root: Path, config_path: Path, verbose: bool):
+@click.option(
+    "--log-level",
+    default="INFO",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Logging level (default: INFO).",
+    show_default=True,
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force re-execution of all steps, ignoring existing outputs.",
+)
+
+def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path, force: bool):
     """
     Run the RegistraBIDS pipeline on a BIDS dataset.
     """
-    setup_logging(verbose)
+    setup_logging(log_level)
 
     config = load_config(str(config_path))
 
     run_pipeline(
         bids_root=str(bids_root),
         config=config,
+        output_dir=output_dir,
+        force=force,
     )
 
 

@@ -186,15 +186,29 @@ def run_registration(
     out_prefix: Path,
     config: RegistrationConfig,
     log_file: Optional[Path] = None,
+    force: bool=False,
 ) -> dict[str, Path]:
     """
     Run antsRegistration based on the provided configuration.
     Returns the paths of the outputs (warped, inv_warped, transforms).
     """
-    fixed = Path(fixed)
-    moving = Path(moving)
     out_prefix = Path(out_prefix)
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    
+    warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
+
+    # Le recalage est considéré terminé si le warped existe et est non vide
+    if not force and warped.exists() and warped.stat().st_size > 0:
+        logger.info("Skip recalage — output déjà existant : %s", warped.name)
+        return {
+            "warped": warped,
+            "inv_warped": out_prefix.parent / f"{out_prefix.name}_inv_warped.nii.gz",
+            "prefix": out_prefix,
+            "log": log_file or out_prefix.with_suffix(".log"),
+        }
+    
+    fixed = Path(fixed)
+    moving = Path(moving)
 
     log_file = log_file or out_prefix.with_suffix(".log")
 
