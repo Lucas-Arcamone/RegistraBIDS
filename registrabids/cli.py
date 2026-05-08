@@ -49,8 +49,14 @@ def load_config(config_path: str) -> dict:
     help="Logging level (default: INFO).",
     show_default=True,
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force re-execution of all steps, ignoring existing outputs.",
+)
 
-def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path):
+def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path, force: bool):
     """
     Run the RegistraBIDS pipeline on a BIDS dataset.
     """
@@ -62,6 +68,7 @@ def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path)
         bids_root=str(bids_root),
         config=config,
         output_dir=output_dir,
+        force=force,
     )
 
 

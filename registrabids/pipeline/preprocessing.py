@@ -21,6 +21,10 @@ def _save_nifti_safe(img: nib.Nifti1Image, dest: Path) -> None:
     nib.save(img, dest)
     logger.debug("Save → %s", dest.name)
 
+def _output_exists(path: Path) -> bool:
+    """Vérifie si un output existe et est non vide."""
+    return path.exists() and path.stat().st_size > 0
+
 # ─────────────────────────────────────────
 # Parsers — config → dataclasses
 # ─────────────────────────────────────────
@@ -140,7 +144,7 @@ def build_preprocessing_plan(
             if save_n4
             else _temp_nifti("_N4.nii.gz")
         )
-        
+
         job = N4Job(
             input_path=current_path,
             output_path=n4_out,
@@ -367,7 +371,7 @@ def _temp_nifti(suffix: str) -> Path:
     logger.debug("Fichier temporaire prévu : %s (dir exists=%s)", out, tmp_dir.exists())
     return out
 
-def run_preprocessing_plan(plan: PreprocessingPlan) -> Path:
+def run_preprocessing_plan(plan: PreprocessingPlan, force : bool = False) -> Path:
     """
     Exécute tous les jobs d'un PreprocessingPlan dans l'ordre.
     Retourne le path du fichier préprocessé final.
@@ -385,6 +389,10 @@ def run_preprocessing_plan(plan: PreprocessingPlan) -> Path:
     )
 
     for job in plan.jobs:
+        if not force and _output_exists(job.output_path):
+            logger.info("Skip — output déjà existant : %s", job.output_path.name)
+            continue
+
         if isinstance(job, VolumeExtractionJob):
             run_volume_extraction(job)
         elif isinstance(job, DenoisingJob):

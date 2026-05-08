@@ -22,6 +22,7 @@ class ApplyTransformJob:
     qmap: Path
     source_key: str        # doit matcher un RegistrationJob.source_key
     out_path: Path
+    space_ref: Path
 
 
 # ─────────────────────────────────────────

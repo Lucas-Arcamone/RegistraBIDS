@@ -211,6 +211,7 @@ class RegistrationPlanner:
                     qmap=Path(qmap_path),
                     source_key=key,
                     out_path=out_base / "warped" / qmap_out_name,
+                    space_ref=self.template,
                 )
             )
 
