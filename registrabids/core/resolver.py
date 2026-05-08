@@ -214,27 +214,27 @@ class RegistrationPlanner:
                 )
             )
 
-        if preproc_config:
-            # Plan pour la référence
-            ref_entities = self._entities_from_path(ref)  # voir helper ci-dessous
-            plan.preprocessing_plans["ref"] = build_preprocessing_plan(
-                source_key="ref",
-                file_path=ref,
-                entities=ref_entities,
+
+        # Plan pour la référence
+        ref_entities = self._entities_from_path(ref)  # voir helper ci-dessous
+        plan.preprocessing_plans["ref"] = build_preprocessing_plan(
+            source_key="ref",
+            file_path=ref,
+            entities=ref_entities,
+            preproc_config=preproc_config,
+            out_base=out_base,
+        )
+        # Plan pour chaque source unique
+        for key, source_path in seen_sources.items():
+            src_entities = self._entities_from_path(source_path)
+            plan.preprocessing_plans[key] = build_preprocessing_plan(
+                source_key=key,
+                file_path=source_path,
+                entities=src_entities,
                 preproc_config=preproc_config,
                 out_base=out_base,
-            )
-            # Plan pour chaque source unique
-            for key, source_path in seen_sources.items():
-                src_entities = self._entities_from_path(source_path)
-                plan.preprocessing_plans[key] = build_preprocessing_plan(
-                    source_key=key,
-                    file_path=source_path,
-                    entities=src_entities,
-                    preproc_config=preproc_config,
-                    out_base=out_base,
-                )        
-                self._log_plan(plan)
+            )        
+            self._log_plan(plan)
         return plan
 
     def _log_plan(self, plan: SessionPlan) -> None:

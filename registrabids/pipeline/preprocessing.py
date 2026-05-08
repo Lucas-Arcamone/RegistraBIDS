@@ -38,15 +38,15 @@ def _resolve_strategy(
     rules: list[dict],
 ) -> tuple[str, dict]:
     """
-    Retourne (strategy, params) pour un fichier donné.
-    Première règle qui matche gagne.
-    Fallback : first_volume si aucune règle ne matche.
+    Returns (strategy, params) for a given file.
+    The first rule that matches wins.
+    Fallback: first_volume if no rule matches.
     """
     for rule in rules:
         if _match_rule(entities, rule.get("match", {})):
             return rule["strategy"], rule.get("params", {})
     logger.warning(
-        "Aucune règle volume_extraction ne matche %s — fallback : first_volume",
+        "No volume_extraction rule matches %s — fallback : first_volume",
         entities,
     )
     return "first_volume", {}
@@ -66,12 +66,12 @@ def build_preprocessing_plan(
     out_base: Path,
 ) -> PreprocessingPlan:
     """
-    Construit le plan de preprocessing pour un fichier source ou référence.
+    Builds the preprocessing plan for a source or reference file.
     """
-    save_cfg = preproc_config.get("save_intermediates", {})
-    extraction_cfg = preproc_config.get("volume_extraction", {})
-    n4_cfg = preproc_config.get("n4", {})
-    denoising_cfg = preproc_config.get("denoising", {})
+    save_cfg = (preproc_config or {}).get("save_intermediates", {})
+    extraction_cfg = (preproc_config or {}).get("volume_extraction", {})
+    n4_cfg = (preproc_config or {}).get("n4", {})
+    denoising_cfg = (preproc_config or {}).get("denoising", {})
 
     suffix = entities.get("suffix", "")
     preproc_dir = out_base / "preproc" / source_key
@@ -81,7 +81,7 @@ def build_preprocessing_plan(
     current_path = file_path
     stem = _clean_stem(file_path)
 
-    # ── Étape 1 : extraction 3D si nécessaire ───────────────────────────
+    # ── Step 1: 3D extraction, if necessary ───────────────────────────
     img = nib.load(file_path)
     is_4d = img.ndim == 4 and img.shape[3] > 1
 
@@ -90,10 +90,11 @@ def build_preprocessing_plan(
         strategy, params = _resolve_strategy(entities, rules)
         save_extraction = save_cfg.get("extraction", False)
 
-        if save_extraction:
-            ext_out = preproc_dir / f"{stem}_extracted.nii.gz"
-        else:
-            ext_out = _temp_nifti("_extracted.nii.gz")
+        ext_out = (
+            preproc_dir / f"{stem}_extracted.nii.gz"
+            if save_extraction
+            else _temp_nifti("_extracted.nii.gz")
+        )
 
         job = VolumeExtractionJob(
             input_path=current_path,
@@ -105,14 +106,15 @@ def build_preprocessing_plan(
         jobs.append(job)
         current_path = ext_out
 
-    # ── Étape 2 : débruitage ────────────────────────────────────────────
+    # ── Step 2: denoising ────────────────────────────────────────────
     if denoising_cfg.get("enabled", False):
         save_denoising = save_cfg.get("denoising", False)
 
-        if save_denoising:
-            den_out = preproc_dir / f"{stem}_denoised.nii.gz"
-        else:
-            den_out = _temp_nifti("_denoised.nii.gz")
+        den_out = (
+            preproc_dir / f"{stem}_denoised.nii.gz"
+            if save_denoising
+            else _temp_nifti("_denoised.nii.gz")
+        )
 
         job = DenoisingJob(
             input_path=current_path,
@@ -126,18 +128,19 @@ def build_preprocessing_plan(
         jobs.append(job)
         current_path = den_out
 
-    # ── Étape 3 : N4 ────────────────────────────────────────────────────
+    # ── Step 3: N4 ────────────────────────────────────────────────────
     skip_suffixes = n4_cfg.get("skip_suffixes", [])
     n4_enabled = n4_cfg.get("enabled", False) and suffix not in skip_suffixes
 
     if n4_enabled:
         save_n4 = save_cfg.get("n4", False)
 
-        if save_n4:
-            n4_out = preproc_dir / f"{stem}_N4.nii.gz"
-        else:
-            n4_out = _temp_nifti("_N4.nii.gz")
-
+        n4_out = (
+            preproc_dir / f"{stem}_N4.nii.gz"
+            if save_n4
+            else _temp_nifti("_N4.nii.gz")
+        )
+        
         job = N4Job(
             input_path=current_path,
             output_path=n4_out,
@@ -149,7 +152,7 @@ def build_preprocessing_plan(
         jobs.append(job)
         current_path = n4_out
 
-    # Si aucun job : le fichier est déjà prêt (3D, pas de N4, pas de denoising)
+    # If no job: the file is already ready (3D, no N4, no denoising)
     return PreprocessingPlan(
         source_key=source_key,
         original_path=file_path,
@@ -159,7 +162,7 @@ def build_preprocessing_plan(
 
 
 # ─────────────────────────────────────────
-# Exécuteurs — un par type de job
+# Executors — one per Job type
 # ─────────────────────────────────────────
 
 def run_volume_extraction(job: VolumeExtractionJob) -> None:
@@ -182,8 +185,8 @@ def run_volume_extraction(job: VolumeExtractionJob) -> None:
 
     else:
         raise ValueError(
-            f"Stratégie d'extraction inconnue : '{strategy}'. "
-            f"Valeurs acceptées : first_volume, mean, geometric_mean_shell, "
+            f"Unknown extraction strategy : '{strategy}'. "
+            f"Accepted values : first_volume, mean, geometric_mean_shell, "
             f"weighted_mean_echo."
         )
 

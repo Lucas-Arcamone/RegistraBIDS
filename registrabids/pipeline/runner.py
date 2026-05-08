@@ -42,7 +42,6 @@ def run_session(
     plan: SessionPlan,
     reg_config_template: dict,   # bloc YAML registration.ref_to_template
     reg_config_qmri: dict,      # bloc YAML registration.ref_to_qmri 
-    preproc_config=None,
 ) -> None:
     """
     Execute the complete plan for a session :
@@ -159,7 +158,6 @@ def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None) 
                 plan=plan,
                 reg_config_template=config["registration"]["ref_to_template"],
                 reg_config_qmri=config["registration"]["ref_to_qmri"],
-                preproc_config=preproc_config,
             )
         except RuntimeError as e:
             logger.error("Error sub-%s ses-%s : %s", sub, ses, e)
