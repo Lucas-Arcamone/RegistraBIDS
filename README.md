@@ -99,42 +99,6 @@ reference:
 template:
   atlas: ABAv3
   
-preprocessing:
-  save_intermediates:
-    extraction: false
-    denoising: false
-    n4: false
-
-  volume_extraction:
-    rules:
-      - match: {suffix: T1w, acquisition: flash}
-        strategy: mean
-
-      - match: {suffix: T1w, acquisition: refMT}
-        strategy: mean
-
-      - match: {suffix: dwi, acquisition: ogse}
-        strategy: geometric_mean_shell
-        params:
-          target_bval: 0
-
-      - match: {suffix: bold}
-        strategy: weighted_mean_echo
-  
-  n4:
-    enabled: true
-    skip_suffixes: [dwi]        # ← N4 jamais appliqué sur ces suffixes
-    shrink_factor: 4
-    n_iterations: [50, 50, 30, 20]
-    convergence_threshold: 0.001
-
-  denoising:
-    enabled: true
-    method: NLMF                # NLMF | MPPCA
-    noise_model: rician         # rician | gaussian
-    patch_radius: 1
-    search_radius: 3
-
 registration:
   ref_to_template:
     stages:
@@ -191,6 +155,67 @@ filter:
 
 If `filter` is absent, all subjects and sessions in the dataset are processed.
 
+### Perform preprocesssing 
+You can choose to apply preprocessing algorithm in order to improve registrations. 
+If `preprocessing` is absent, only the extraction is performed using the `first_volume` rule. 
+With the `save_intermediates` extractor you can choose to save intermediate (use bool: true or false) files from extraction, denoiser and n4 process.
+
+```yaml
+preprocessing:
+  save_intermediates:
+    extraction: true
+    denoising: true
+    n4: true
+
+  volume_extraction:
+    rules:
+      - match: {suffix: T1w, acquisition: flash}
+        strategy: mean
+
+      - match: {suffix: T1w, acquisition: refMT}
+        strategy: mean
+
+      - match: {suffix: dwi, acquisition: ogse}
+        strategy: geometric_mean_shell
+        params:
+          target_bval: 0
+
+      - match: {suffix: bold}
+        strategy: weighted_mean_echo
+
+      # default fallback if no rule matches → first_volume
+      # can also be declared explicitly:
+      # - match: {}
+      #   strategy: first_volume
+
+  n4:
+    enabled: true
+    skip_suffixes: [dwi]        # ← N4 never applied on diffusion MRI
+    shrink_factor: 4
+    n_iterations: [50, 50, 30, 20]
+    convergence_threshold: 0.001
+
+  denoising:
+    enabled: true
+    method: NLMF                # NLMF | MPPCA
+    noise_model: rician         # rician | gaussian
+    patch_radius: 1
+    search_radius: 3
+```
+
+#### 4D to 3D strategies 
+The `volume_extraction` extractor consist of the strategy to go from a 4D volume to a 3D volume. You can control to apply the extraction strategy according to BIDS sidecars (e.g. suffix: MEGRE, echo: 01). Here are described the different strategies implemented  : 
+ - `mean`: extract the mean volume;
+ - `geometric_mean_shell` with `target_val` paramater: If `target_val` is choosen to be 0, then a mean strategy is automatically applied otherwise concatenate the volume by applying geometric mean;
+ - `weighted_mean_echo`: For multi-echoes acquisition, extract the weighted mean echo according to a naïve mono-exponential model approch. The first echoes are more weighted than the last ones maximizing the quality. 
+ - `first_volume`: Extract the first volume.  
+
+#### Bias field correction
+You can choose to automatically applied N4 algorithm. This part use the `N4BiasFieldCorrection` command line, make shure you have access to this function in your computer.
+
+#### Denoising 
+Finally, you can choose to correct your data from noise using either MPPCA or NLMF strategies. Both denoising strategy use DIPY implementation. You can use to correct from Rician or Gaussian noise when using NLMF.
+
 ### Configuration reference
 
 | Key | Required | Description |
@@ -201,7 +226,10 @@ If `filter` is absent, all subjects and sessions in the dataset are processed.
 | `registration.ref_to_qmri` | ✅ | ANTs stages for source → reference registration (typically Rigid + Affine) |
 | `filter.subjects` | ❌ | List of subject IDs to process. If absent: all subjects |
 | `filter.sessions` | ❌ | List of session IDs to process. If absent: all sessions |
-
+| `preprocessing.save_intermediaites` | ❌ | Save intermediates files. If absent, the intermedates files are not saved |
+| `preprocessing.volume_extraction` | ❌ | Apply the extraction strategy to files that match BIDS sidecars. Available strategies: `mean`, `geometric_mean_shell`, `weighted_mean_echo` and `first_volume`. If absent, use `first_volume` strategy. |
+| `preprocessing.n4` | ❌ | Apply N4 bias field correction (ANTS) |
+| `preprocessing.denoising` | ❌ | Apply choosen denoising algrorithm. Available algorithms: MPPCA and NLMF (DIPY) |
 ---
 
 
@@ -212,12 +240,14 @@ pixi run python -m registrabids.cli /path/to/my_dataset \
   --config /path/to/my_dataset/derivatives/registrabids/config.yaml
 ```
 
-Log level can be controlled with `--log-level`:
+Log level can be controlled with `--log-level`. The output directory can be controlled with `--output-dir`. You can control to force re-execution of all steps, ignoring existing outputs by using `--force`.
 
 ```bash
 pixi run python -m registrabids.cli /path/to/my_dataset \
   --config /path/to/config.yaml \
   --log-level DEBUG
+  --output-dir /path/to/a/different/directory/
+  --force 
 ```
 
 ---
@@ -230,6 +260,11 @@ Results are written to `derivatives/registrabids/` following this structure:
 derivatives/registrabids/
 └── sub-01/
     └── ses-01/
+        ├── preproc/
+        │   ├── ref
+        │   │   ├── ref_denoised.nii.gz
+        │   │   └── ref_N4.nii.gz
+        │   └── ...      
         ├── ref_to_template/
         │   ├── ref_to_template_0GenericAffine.mat
         │   ├── ref_to_template_1Warp.nii.gz
