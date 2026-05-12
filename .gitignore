@@ -5,4 +5,4 @@ __pycache__/
 *.pyc
 .env
 .vscode/
-.egg-info/
+*.egg-info/
