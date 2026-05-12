@@ -1,4 +1,0 @@
-numpy
-nibabel
-pybids
-click

@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: registrabids
-Version: 0.1.0
-Summary: BIDS registration pipeline using ANTs
-Requires-Python: >=3.10
-Requires-Dist: numpy
-Requires-Dist: nibabel
-Requires-Dist: pybids
-Requires-Dist: click
