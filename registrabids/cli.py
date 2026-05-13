@@ -55,8 +55,14 @@ def load_config(config_path: str) -> dict:
     default=False,
     help="Force re-execution of all steps, ignoring existing outputs.",
 )
+@click.option(
+    "--no-parallel",
+    is_flag=True,
+    default=False,
+    help="Disable parallel execution (useful for debugging).",
+)
 
-def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path, force: bool):
+def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path, force: bool, no_parallel: bool):
     """
     Run the RegistraBIDS pipeline on a BIDS dataset.
     """
@@ -64,6 +70,9 @@ def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path,
 
     config = load_config(str(config_path))
 
+    if no_parallel:
+        config.setdefault("parallelism", {})["disabled"] = True
+        
     run_pipeline(
         bids_root=str(bids_root),
         config=config,
