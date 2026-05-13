@@ -10,12 +10,65 @@ from registrabids.core.template import TemplateLoader
 from registrabids.pipeline.preprocessing import run_preprocessing_plan
 logger = logging.getLogger(__name__)
 
+import nibabel as nib
+import numpy as np
+import tempfile
+from pathlib import Path
+import shutil
+
+
+def _make_reference_grid(
+    template_path: Path,
+    qmap_path: Path,
+    tmp_dir: Path,
+) -> Path:
+    """
+    Creates a reference image for antsApplyTransforms using:
+    - the template's space and orientation
+    - the qmap's resolution
+
+    This prevents qmaps from being oversampled at the template's resolution.
+    """
+    tpl = nib.load(template_path)
+    qmap = nib.load(qmap_path)
+
+    tpl_affine = tpl.affine
+    tpl_shape = np.array(tpl.shape[:3])
+    tpl_voxsize = np.sqrt((tpl_affine[:3, :3] ** 2).sum(axis=0))
+
+    qmap_affine = qmap.affine
+    qmap_voxsize = np.sqrt((qmap_affine[:3, :3] ** 2).sum(axis=0))
+
+    # new shape : adjust the template FOV with the qmap resolution
+    new_shape = np.round(tpl_shape * (tpl_voxsize / qmap_voxsize)).astype(int)
+
+    # new affine matrix : same origin and orientation as the template,
+    # but qmap voxel size 
+    scaling = np.diag(qmap_voxsize / tpl_voxsize)
+    new_affine = tpl_affine.copy()
+    new_affine[:3, :3] = tpl_affine[:3, :3] @ scaling
+
+    logger.debug(
+        "Hybrid grid : shape %s → %s | voxsize %s → %s",
+        tuple(tpl_shape), tuple(new_shape),
+        np.round(tpl_voxsize, 3).tolist(),
+        np.round(qmap_voxsize, 3).tolist(),
+    )
+
+    ref_img = nib.Nifti1Image(
+        np.zeros(new_shape, dtype=np.float32),
+        affine=new_affine,
+    )
+
+    ref_path = tmp_dir / f"ref_grid_{qmap_path.stem}.nii.gz"
+    nib.save(ref_img, ref_path)
+    return ref_path
 
 def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     """
-    Lance antsApplyTransforms pour amener la qmap dans l'espace template.
-    transforms : liste ordonnée des fichiers de transform à chaîner,
-                 du plus récent au plus ancien (convention ANTs).
+    Call antsApplyTransforms to map the qmap into the template space.
+    transforms: an ordered list of transform files to chain together,
+                 from newest to oldest (ANTs convention).
     """
     if job.out_path.exists() and job.out_path.stat().st_size > 0:
         logger.info("Skip apply — output déjà existant : %s", job.out_path.name)
@@ -23,27 +76,38 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     
     import subprocess
     job.out_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "antsApplyTransforms",
-        "-d", "3",
-        "-e", "3",
-        "-i", str(job.qmap),
-        "-r", str(job.space_ref),   
-        "-o", str(job.out_path),
-        "--interpolation", "Linear",
-    ]
-    for t in transforms:
-        cmd += ["-t", t]
 
-    logger.info("Applying transforms → %s", job.out_path.name)
-    logger.debug("Command : %s", " ".join(cmd))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_ref_", dir="/tmp"))
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"antsApplyTransforms a échoué pour {job.qmap.name} :\n"
-            f"{result.stderr}"
+    try:
+        ref_grid = _make_reference_grid(
+            template_path=job.space_ref,
+            qmap_path=job.qmap,
+            tmp_dir=tmp_dir,
         )
+        cmd = [
+            "antsApplyTransforms",
+            "-d", "3",
+            "-e", "3",
+            "-i", str(job.qmap),
+            "-r", str(ref_grid),   
+            "-o", str(job.out_path),
+            "--interpolation", "Linear",
+        ]
+        for t in transforms:
+            cmd += ["-t", t]
+
+        logger.info("Applying transforms → %s", job.out_path.name)
+        logger.debug("Command : %s", " ".join(cmd))
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"antsApplyTransforms a échoué pour {job.qmap.name} :\n"
+                f"{result.stderr}"
+            )
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 def run_session(
     plan: SessionPlan,
