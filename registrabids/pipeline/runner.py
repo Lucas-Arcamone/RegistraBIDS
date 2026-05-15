@@ -211,10 +211,6 @@ def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, 
             logger.warning("No reference for sub-%s ses-%s, session ignored.", sub, ses)
             continue
 
-        if not ref_path:
-            logger.error("Reference file not found in the layout : %s", ref_path[0])
-            continue
-        
         preproc_config = config.get("preprocessing")
 
         plan = planner.build_session_plan(

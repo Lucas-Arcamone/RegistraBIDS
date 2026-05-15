@@ -366,9 +366,9 @@ def run_n4(job: N4Job) -> None:
     logger.info("N4 → %s", job.output_path.name)
 
 def _temp_nifti(suffix: str) -> Path:
-    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_", dir="/tmp"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_"))
     out = tmp_dir / f"tmp{suffix}"
-    logger.debug("Fichier temporaire prévu : %s (dir exists=%s)", out, tmp_dir.exists())
+    logger.debug("Temporary file created: %s (dir exists=%s)", out, tmp_dir.exists())
     return out
 
 def run_preprocessing_plan(plan: PreprocessingPlan, force : bool = False) -> Path:
