@@ -1,6 +1,13 @@
 # RegistraBIDS
 
-**RegistraBIDS** automates the registration of quantitative MRI (qMRI) maps into a common atlas space, starting from a BIDS-compliant dataset. It uses ANTs under the hood and requires no manual path management — everything is driven by a single YAML configuration file.
+**RegistraBIDS** automates the registration of quantitative MRI (qMRI) images in a common atlas space based on acquired raw data to optimize registration quality, starting from a dataset that complies with the BIDS standard. It uses ANTs under the hoods and requires no manual path management: everything is controlled by a single YAML configuration file.
+
+The pipeline handles the full registration workflow:
+- **Preprocessing** — automatic 4D→3D volume extraction with different strategy (e.g. mean, first volume, dwi geometric mean, etc.), optional denoising (NLMF, MPPCA) and bias field correction (N4), all configurable per acquisition type
+- **Registration** — SyN registration of the reference image to the atlas template, followed by rigid/affine registration of each source image to the reference
+- **Transform application** — qMRI maps are brought into atlas space by chaining transforms, preserving their native resolution
+- **Parallelism** — sessions and intra-session jobs (preprocessing, registration, apply transforms) run in parallel via joblib, with automatic CPU allocation
+- **Resume support** — completed steps are automatically skipped on re-run; use `--force` to reprocess
 
 ---
 
@@ -10,6 +17,11 @@
 - [Installation](#installation)
 - [Dataset structure](#dataset-structure)
 - [Configuration file](#configuration-file)
+  - [Minimal example](#minimal-example)
+  - [Processing only specific subjects/sessions](#processing-only-specific-subjectssessions)
+  - [Perform preprocesssing](#perform-preprocesssing)
+  - [Parallelism management](#parallelism-management)
+  - [Configuration reference](#configuration-file)
 - [Running the pipeline](#running-the-pipeline)
 - [Outputs](#outputs)
 - [Available atlases](#available-atlases)
@@ -221,6 +233,52 @@ You can choose to automatically applied N4 algorithm. This part use the `N4BiasF
 #### Denoising
 Finally, you can choose to correct your data from noise using either MPPCA or NLMF strategies. Both denoising strategy use DIPY implementation. You can use to correct from Rician or Gaussian noise when using NLMF.
 
+### Parallelism management
+
+This pipeline automatically uses available resources to run processes in parallel. You can control parallelism via the configuration file:
+
+```yaml
+parallelism:
+  n_sessions: 2  # number of sessions running in parallel
+  n_workers: 4   # number of parallel tasks within each session
+```
+
+ANTs threads are allocated automatically: `available_CPUs / (n_sessions × n_workers)`.
+
+For example, with 32 CPUs, `n_sessions: 2` and `n_workers: 4`:
+- 2 × 4 = 8 ANTs processes run simultaneously
+- Each ANTs process receives 32 / 8 = **4 threads**
+
+To disable parallelism entirely (useful for debugging):
+
+```yaml
+parallelism:
+  disabled: true
+```
+If no `parallelism` block is specified in the configuration file, the pipeline
+automatically detects the available CPUs and defaults to:
+
+- `n_sessions = 1` — one session at a time
+- `n_workers = available_CPUs` — all CPUs allocated to parallel tasks within the session
+
+Each ANTs process then receives `available_CPUs / n_workers = 1` thread.
+While this default maximizes intra-session parallelism, it is not optimal for
+the SyN registration step between the reference and the template, which is
+computationally intensive and benefits from multi-threading.
+
+For better performance, we recommend explicitly setting `n_workers` to the number
+of independent registration jobs (typically 2–4) so that each ANTs process
+receives more threads:
+
+```yaml
+parallelism:
+  n_sessions: 1
+  n_workers: 3   # ref→template + source_A→ref + source_B→ref
+```
+
+With 32 CPUs and `n_workers: 3`, each ANTs process receives `32 / 3 ≈ 10` threads,
+significantly accelerating the SyN step.
+
 ### Configuration reference
 
 | Key | Required | Description |
@@ -235,6 +293,7 @@ Finally, you can choose to correct your data from noise using either MPPCA or NL
 | `preprocessing.volume_extraction` | ❌ | Apply the extraction strategy to files that match BIDS sidecars. Available strategies: `mean`, `geometric_mean_shell`, `weighted_mean_echo` and `first_volume`. If absent, use `first_volume` strategy. |
 | `preprocessing.n4` | ❌ | Apply N4 bias field correction (ANTS) |
 | `preprocessing.denoising` | ❌ | Apply choosen denoising algrorithm. Available algorithms: MPPCA and NLMF (DIPY) |
+| `parallelism` | ❌ | Controls parallel execution. `n_sessions`: number of sessions running simultaneously. `n_workers`: number of parallel tasks within each session. If absent, defaults to `n_sessions=1` and `n_workers=available_CPUs` (see **Parallelism management**) |
 ---
 
 
