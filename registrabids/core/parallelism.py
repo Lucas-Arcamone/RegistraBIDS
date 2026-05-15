@@ -1,4 +1,5 @@
-# core/parallelism.py
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
 from __future__ import annotations
 import logging
 import os

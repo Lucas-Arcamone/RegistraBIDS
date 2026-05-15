@@ -26,6 +26,8 @@ The pipeline handles the full registration workflow:
 - [Outputs](#outputs)
 - [Available atlases](#available-atlases)
 - [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Citations](#citations)
 
 ---
 
@@ -392,3 +394,41 @@ The JSON sidecar for that qMRI map is missing or has an empty `Sources` field. T
 
 **ANTs registration fails (non-zero return code)**
 Check the `.log` file next to the transform outputs. Each registration job writes a detailed log at `<out_prefix>.log`.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 —
+see the [LICENSE](LICENSE) file for details.
+
+## Citations
+
+If you use RegistraBIDS in your research, please cite the following tools:
+
+### ANTs
+
+Avants, B. B., Epstein, C. L., Grossman, M., & Gee, J. C. (2008). Symmetric
+diffeomorphic image registration with cross-correlation: evaluating automated
+labeling of elderly and neurodegenerative brain. *Medical Image Analysis*, 12(1),
+26–41. https://doi.org/10.1016/j.media.2007.06.004
+
+### DIPY
+
+Garyfallidis, E., Brett, M., Amirbekian, B., Rokem, A., Van Der Walt, S.,
+Descoteaux, M., Nimmo-Smith, I., & Dipy Contributors (2014). Dipy, a library
+for the analysis of diffusion MRI data. *Frontiers in Neuroinformatics*, 8, 8.
+https://doi.org/10.3389/fninf.2014.00008
+
+### Denoising
+
+**NLMF** — if you used `method: NLMF`:
+
+Manjón, J. V., Coupé, P., Martí-Bonmatí, L., Collins, D. L., & Robles, M.
+(2010). Adaptive non-local means denoising of MR images with spatially varying
+noise levels. *Journal of Magnetic Resonance Imaging*, 31(1), 192–203.
+https://doi.org/10.1002/jmri.22003
+
+**MPPCA** — if you used `method: MPPCA`:
+
+Veraart, J., Novikov, D. S., Christiaens, D., Ades-aron, B., Sijbers, J., &
+Fieremans, E. (2016). Denoising of diffusion MRI using random matrix theory.
+*NeuroImage*, 142, 394–406. https://doi.org/10.1016/j.neuroimage.2016.08.016

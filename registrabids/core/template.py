@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
+
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
@@ -11,20 +14,22 @@ _RESOURCES_DIR = Path(__file__).parent.parent / "resources"
 # Useful suffixes in the ABAv3 atlas
 _KNOWN_SUFFIXES = {
     "template": ["_anat.nii.gz"],
-    "mask":     ["_mask.nii.gz"],
+    "mask": ["_mask.nii.gz"],
     "annotation": ["_dseg.nii.gz"],
 }
+
 
 @dataclass
 class AtlasFiles:
     """Initializes the atlas by verifying that the necessary files exist."""
+
     name: str
     template: Path
     mask: Path | None = None
     annotation: Path | None = None
     extra: dict[str, Path] = field(default_factory=dict)
 
-    def __post_init__(self): 
+    def __post_init__(self):
         if not self.template.exists():
             raise FileNotFoundError(
                 f"Template file not found for the atlas '{self.name}' : "
@@ -33,8 +38,7 @@ class AtlasFiles:
             )
         if self.mask and not self.mask.exists():
             logger.warning(
-                "Mask listed but not found for '%s' : %s",
-                self.name, self.mask
+                "Mask listed but not found for '%s' : %s", self.name, self.mask
             )
             self.mask = None
 
@@ -46,7 +50,7 @@ class TemplateLoader:
     Usage :
         loader = TemplateLoader()
         atlas = loader.load("ABAv3")
-        print(atlas.template) 
+        print(atlas.template)
     """
 
     def __init__(self, resources_dir: Path | None = None):
@@ -57,15 +61,12 @@ class TemplateLoader:
             )
 
     # ─────────────────────────────────────────
-    # public API 
+    # public API
     # ─────────────────────────────────────────
 
     def available_atlases(self) -> list[str]:
         """Lists the atlases available in resources/."""
-        return [
-            d.name for d in sorted(self.resources_dir.iterdir())
-            if d.is_dir()
-        ]
+        return [d.name for d in sorted(self.resources_dir.iterdir()) if d.is_dir()]
 
     def load(self, atlas_name: str) -> AtlasFiles:
         """
@@ -155,9 +156,10 @@ class TemplateLoader:
             if matches:
                 if len(matches) > 1:
                     logger.warning(
-                        "Several files '%s' found for '%s', "
-                        "use of : %s",
-                        suffix, atlas_name, matches[0].name
+                        "Several files '%s' found for '%s', use of : %s",
+                        suffix,
+                        atlas_name,
+                        matches[0].name,
                     )
                 return matches[0]
 

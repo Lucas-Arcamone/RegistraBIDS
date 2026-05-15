@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
+
 from bids import BIDSLayout
 from collections import defaultdict
 import logging
@@ -8,9 +11,7 @@ logger = logging.getLogger(__name__)
 class BIDSIndex:
     def __init__(self, root):
         self.layout = BIDSLayout(
-            root,
-            derivatives=[f"{root}/derivatives/qmri"],
-            validate=False
+            root, derivatives=[f"{root}/derivatives/qmri"], validate=False
         )
 
     def get_subjects(self):
@@ -32,10 +33,7 @@ class BIDSIndex:
         subjects = filter_cfg.get("subjects")
         sessions = filter_cfg.get("sessions")
 
-        query = {
-            "scope": "qmri",
-            "extension": [".nii", ".nii.gz"]
-        }
+        query = {"scope": "qmri", "extension": [".nii", ".nii.gz"]}
 
         if subjects is not None:
             query["subject"] = subjects
@@ -48,7 +46,8 @@ class BIDSIndex:
 
         # Filtre les fichiers sans subject/session (dataset-level)
         valid_files = [
-            f for f in files
+            f
+            for f in files
             if f.entities.get("subject") is not None
             and f.entities.get("session") is not None
         ]
@@ -56,7 +55,7 @@ class BIDSIndex:
         if len(valid_files) < len(files):
             logger.debug(
                 "%d fichier(s) qmri sans subject/session ignoré(s)",
-                len(files) - len(valid_files)
+                len(files) - len(valid_files),
             )
 
         return valid_files
@@ -76,10 +75,7 @@ class BIDSIndex:
             if sub is not None and ses is not None:
                 grouped[(sub, ses)].append(f)
 
-        logger.info(
-            "%d couple(s) (sub, ses) avec qmri maps trouvé(s)",
-            len(grouped)
-        )
+        logger.info("%d couple(s) (sub, ses) avec qmri maps trouvé(s)", len(grouped))
         return grouped
 
     def map_to_sources(self, config: dict):

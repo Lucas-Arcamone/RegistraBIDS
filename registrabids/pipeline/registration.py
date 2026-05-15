@@ -1,4 +1,6 @@
-# pipeline/registration.py
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
+
 import subprocess
 import logging
 import os
@@ -13,12 +15,13 @@ logger = logging.getLogger(__name__)
 # Dataclasses — represent an ANTs stage
 # ─────────────────────────────────────────
 
+
 @dataclass
 class MetricConfig:
-    name: str                        # MI, Mattes, otherwise CC, MeanSquares have radius 
+    name: str  # MI, Mattes, otherwise CC, MeanSquares have radius
     weight: float = 1.0
     bins: int = 32
-    sampling: str = "Regular"        # Regular, Random, None
+    sampling: str = "Regular"  # Regular, Random, None
     sampling_rate: float = 0.25
 
     def to_ants_string(self, fixed: str, moving: str) -> str:
@@ -32,7 +35,7 @@ class MetricConfig:
 @dataclass
 class StageConfig:
     metric: MetricConfig
-    transform: str                   # Rigid, Affine, SyN, BSplineSyN...
+    transform: str  # Rigid, Affine, SyN, BSplineSyN...
     transform_params: list[float]
     convergence: list[int]
     shrink_factors: list[int]
@@ -77,6 +80,7 @@ class RegistrationConfig:
 # Parsers YAML → dataclasses
 # ─────────────────────────────────────────
 
+
 def _parse_metric(cfg: dict) -> MetricConfig:
     p = cfg.get("metric_params", {})
     return MetricConfig(
@@ -118,6 +122,7 @@ def parse_registration_config(reg_cfg: dict) -> RegistrationConfig:
 # ANTs Command Builder
 # ─────────────────────────────────────────
 
+
 def _build_command(
     fixed: str,
     moving: str,
@@ -129,9 +134,12 @@ def _build_command(
 
     cmd = [
         "antsRegistration",
-        "-d", str(config.dimensionality),
-        "--float", "0",
-        "-o", f"[{out_prefix},{warped},{inv_warped}]",
+        "-d",
+        str(config.dimensionality),
+        "--float",
+        "0",
+        "-o",
+        f"[{out_prefix},{warped},{inv_warped}]",
     ]
 
     if config.init_transform:
@@ -151,6 +159,7 @@ def _build_command(
 
     return cmd
 
+
 def _ants_env() -> dict:
     """
     Environment variables to force gzip compression in ANTs output.
@@ -166,19 +175,23 @@ def _ants_env() -> dict:
 def _verify_nifti(path: Path) -> None:
     """Verifies that a .nii.gz file is a valid gzip file."""
     import gzip
+
     if not path.exists():
         raise RuntimeError(f"Missing ANTs output file : {path}")
     try:
         with gzip.open(path, "rb") as f:
-            f.read(4)   # lit juste le header gzip
+            f.read(4)  # lit juste le header gzip
     except gzip.BadGzipFile:
         raise RuntimeError(
             f"The ANTs output file is not a valid gzip file: {path}\n"
             f"Check the associated ANTs log."
         )
+
+
 # ─────────────────────────────────────────
 # Fonction principale
 # ─────────────────────────────────────────
+
 
 def run_registration(
     fixed: Path,
@@ -186,7 +199,7 @@ def run_registration(
     out_prefix: Path,
     config: RegistrationConfig,
     log_file: Optional[Path] = None,
-    force: bool=False,
+    force: bool = False,
 ) -> dict[str, Path]:
     """
     Run antsRegistration based on the provided configuration.
@@ -194,7 +207,7 @@ def run_registration(
     """
     out_prefix = Path(out_prefix)
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
-    
+
     warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
 
     # Le recalage est considéré terminé si le warped existe et est non vide
@@ -206,14 +219,14 @@ def run_registration(
             "prefix": out_prefix,
             "log": log_file or out_prefix.with_suffix(".log"),
         }
-    
+
     fixed = Path(fixed)
     moving = Path(moving)
 
     log_file = log_file or out_prefix.with_suffix(".log")
 
     cmd = _build_command(str(fixed), str(moving), str(out_prefix), config)
-    
+
     logger.info("Run ANTs : %s → %s", moving.name, fixed.name)
     logger.debug("Command : %s", " ".join(cmd))
 
@@ -223,7 +236,7 @@ def run_registration(
             cmd,
             stdout=f,
             stderr=subprocess.STDOUT,
-            env=_ants_env(),  
+            env=_ants_env(),
         )
 
     if result.returncode != 0:
@@ -231,11 +244,11 @@ def run_registration(
             f"antsRegistration failed (code {result.returncode}). "
             f"See log file : {log_file}"
         )
-    
+
     # Vérifie que les fichiers de sortie sont bien là et lisibles
     warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
     _verify_nifti(warped)
-    
+
     return {
         "warped": out_prefix.parent / f"{out_prefix.name}_warped.nii.gz",
         "inv_warped": out_prefix.parent / f"{out_prefix.name}_inv_warped.nii.gz",
