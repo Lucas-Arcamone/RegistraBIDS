@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
+
 import logging
 from pathlib import Path
 
@@ -55,8 +58,9 @@ def load_config(config_path: str) -> dict:
     default=False,
     help="Force re-execution of all steps, ignoring existing outputs.",
 )
-
-def main(bids_root: Path, config_path: Path,  log_level: str,  output_dir: Path, force: bool):
+def main(
+    bids_root: Path, config_path: Path, log_level: str, output_dir: Path, force: bool
+):
     """
     Run the RegistraBIDS pipeline on a BIDS dataset.
     """

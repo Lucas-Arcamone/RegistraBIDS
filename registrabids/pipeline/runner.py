@@ -1,8 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
+
 import logging
 import nibabel as nib
 import numpy as np
 import tempfile
 from pathlib import Path
+from joblib import Parallel, delayed
 import shutil
 
 from registrabids.core.bids_index import BIDSIndex
@@ -14,6 +18,7 @@ from registrabids.pipeline.registration import (
 )
 from registrabids.core.template import TemplateLoader
 from registrabids.pipeline.preprocessing import run_preprocessing_plan
+from registrabids.core.parallelism import resolve_parallelism, run_session_parallel
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +213,9 @@ def run_pipeline(
         else Path(bids_root) / "derivatives" / "registrabids"
     )
 
+    # (Joblib) Parallelism
+    n_sessions, n_workers = resolve_parallelism(config)
+
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
 
@@ -221,6 +229,7 @@ def run_pipeline(
     grouped = index.get_qmri_maps_grouped(config)
     source_map = index.map_to_sources(config)
 
+    session_plans = []
     for (sub, ses), qmri_files in grouped.items():
         ref_path = reference_map.get((sub, ses))
         if not ref_path:
@@ -237,14 +246,16 @@ def run_pipeline(
             source_map=source_map,
             preproc_config=preproc_config,
         )
-        # print(plan.registration_jobs)
-        try:
-            run_session(
-                plan=plan,
-                reg_config_template=config["registration"]["ref_to_template"],
-                reg_config_qmri=config["registration"]["ref_to_qmri"],
-                force=force,
-            )
-        except RuntimeError as e:
-            logger.error("Error sub-%s ses-%s : %s", sub, ses, e)
-            continue
+
+        session_plans.append(plan)
+
+    Parallel(n_jobs=n_sessions, backend="loky")(
+        delayed(run_session_parallel)(
+            plan=plan,
+            reg_config_template=config["registration"]["ref_to_template"],
+            reg_config_qmri=config["registration"]["ref_to_qmri"],
+            force=force,
+            n_workers=n_workers,
+        )
+        for plan in session_plans
+    )

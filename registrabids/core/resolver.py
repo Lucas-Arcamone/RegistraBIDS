@@ -1,9 +1,9 @@
-from pathlib import Path
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Lucas ARCAMONE
 
+from pathlib import Path
 import logging
-from registrabids.core.planner import (
-    SessionPlan, RegistrationJob, ApplyTransformJob
-)
+from registrabids.core.planner import SessionPlan, RegistrationJob, ApplyTransformJob
 from registrabids.pipeline.preprocessing import build_preprocessing_plan
 
 logger = logging.getLogger(__name__)
@@ -54,16 +54,20 @@ class ReferenceResolver:
             if len(candidates) > 1:
                 logger.warning(
                     "Several candidates for sub-%s ses-%s — use of : %s",
-                    sub, ses, candidates[0].filename,
+                    sub,
+                    ses,
+                    candidates[0].filename,
                 )
 
             reference_map[(sub, ses)] = Path(candidates[0].path)
-            logger.debug("Reference sub-%s ses-%s : %s", sub, ses, candidates[0].filename)
+            logger.debug(
+                "Reference sub-%s ses-%s : %s", sub, ses, candidates[0].filename
+            )
 
         if errors:
             raise ValueError(
-                f"{len(errors)} missing reference(s) :\n" +
-                "\n".join(f"  - {e}" for e in errors)
+                f"{len(errors)} missing reference(s) :\n"
+                + "\n".join(f"  - {e}" for e in errors)
             )
 
         return reference_map
@@ -106,8 +110,8 @@ class ReferenceResolver:
                 logger.warning("Sessions absentes du layout : %s", missing)
 
         return sorted(seen)
-    
-    
+
+
 def _source_key(source_path: str) -> str:
     """
     Extrait un identifiant court depuis le path d'une source rawdata.
@@ -136,8 +140,8 @@ class RegistrationPlanner:
         subject: str,
         session: str,
         ref: Path,
-        qmri_files,           # liste de BIDSImageFile
-        source_map: dict,     # {qmap_path: [source_path, ...]}
+        qmri_files,  # liste de BIDSImageFile
+        source_map: dict,  # {qmap_path: [source_path, ...]}
         preproc_config: dict,
     ) -> SessionPlan:
         """
@@ -146,11 +150,7 @@ class RegistrationPlanner:
           - N jobs source_i → ref  (deduplicated by source)
           - M apply jobs (one per qmap)
         """
-        out_base = (
-            self.output_root
-            / f"sub-{subject}"
-            / f"ses-{session}"
-        )
+        out_base = self.output_root / f"sub-{subject}" / f"ses-{session}"
 
         plan = SessionPlan(
             subject=subject,
@@ -171,7 +171,7 @@ class RegistrationPlanner:
         )
 
         # ── Jobs source → ref (dédupliqués) ─────────────────────────────
-        seen_sources: dict[str, Path] = {}   # source_key → source Path
+        seen_sources: dict[str, Path] = {}  # source_key → source Path
 
         for bids_file in qmri_files:
             qmap_path = bids_file.path
@@ -202,9 +202,11 @@ class RegistrationPlanner:
                 )
 
             # ── Apply job pour cette qmap ────────────────────────────────
-            qmap_out_name = Path(qmap_path).name.replace(
-                ".nii.gz", "_space-template.nii.gz"
-            ).replace(".nii", "_space-template.nii.gz")
+            qmap_out_name = (
+                Path(qmap_path)
+                .name.replace(".nii.gz", "_space-template.nii.gz")
+                .replace(".nii", "_space-template.nii.gz")
+            )
 
             plan.apply_jobs.append(
                 ApplyTransformJob(
@@ -214,7 +216,6 @@ class RegistrationPlanner:
                     space_ref=self.template,
                 )
             )
-
 
         # Plan pour la référence
         ref_entities = self._entities_from_path(ref)  # voir helper ci-dessous
@@ -234,14 +235,15 @@ class RegistrationPlanner:
                 entities=src_entities,
                 preproc_config=preproc_config,
                 out_base=out_base,
-            )        
+            )
             self._log_plan(plan)
         return plan
 
     def _log_plan(self, plan: SessionPlan) -> None:
         logger.info(
             "Plan sub-%s ses-%s : %d recalage(s), %d qmap(s) à appliquer",
-            plan.subject, plan.session,
+            plan.subject,
+            plan.session,
             len(plan.registration_jobs),
             len(plan.apply_jobs),
         )
@@ -262,4 +264,5 @@ class RegistrationPlanner:
     @staticmethod
     def _entities_from_path(path: Path) -> dict:
         from bids.layout import parse_file_entities
+
         return parse_file_entities(str(path))
