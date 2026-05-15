@@ -14,23 +14,23 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────
-# Résolution des ressources
+# Resource allocation
 # ─────────────────────────────────────────
 
 
 def resolve_parallelism(config: dict) -> tuple[int, int]:
     """
-    Résout (n_sessions, n_workers) depuis la config ou les ressources disponibles.
+    Determined (n_sessions, n_workers) based on the configuration or available resources.
 
-    Priorité :
-    1. disabled: true  → séquentiel (1, 1)
-    2. Valeurs explicites dans le YAML
-    3. Automatique depuis les CPUs alloués (Slurm-aware via sched_getaffinity)
+    Priority:
+    1. disabled: true  → sequential (1, 1)
+    2. Explicit values in the YAML
+    3. Automatic based on allocated CPUs (Slurm-aware via sched_getaffinity)
     """
     parallelism_cfg = config.get("parallelism", {})
 
     if parallelism_cfg.get("disabled", False):
-        logger.info("Parallélisation désactivée explicitement → mode séquentiel.")
+        logger.info("Parallelization explicitly disabled → sequential mode.")
         return 1, 1
 
     n_sessions = parallelism_cfg.get("n_sessions")
@@ -38,7 +38,7 @@ def resolve_parallelism(config: dict) -> tuple[int, int]:
 
     if n_sessions is not None and n_workers is not None:
         logger.info(
-            "Parallélisme explicite : %d session(s) × %d worker(s).",
+            "Explicite parallelism : %d session(s) × %d worker(s).",
             n_sessions,
             n_workers,
         )
@@ -48,8 +48,7 @@ def resolve_parallelism(config: dict) -> tuple[int, int]:
     n_sessions = 1
     n_workers = max(1, available_cpus)
     logger.info(
-        "Parallélisme automatique : %d CPU(s) détecté(s) → "
-        "%d session(s) × %d worker(s).",
+        "Automatic parallelism : %d CPU(s) detected → %d session(s) × %d worker(s).",
         available_cpus,
         n_sessions,
         n_workers,
@@ -59,9 +58,9 @@ def resolve_parallelism(config: dict) -> tuple[int, int]:
 
 def _available_cpus() -> int:
     """
-    Retourne le nombre de CPUs disponibles.
-    os.sched_getaffinity(0) respecte les allocations Slurm.
-    Fallback sur os.cpu_count() si non disponible (macOS, Windows).
+    Returns the number of available CPUs.
+    os.sched_getaffinity(0) respects Slurm allocations.
+    Falls back to os.cpu_count() if unavailable (macOS, Windows).
     """
     try:
         return len(os.sched_getaffinity(0))
@@ -76,8 +75,8 @@ def _available_cpus() -> int:
 
 def _collect_preprocessed(plan: SessionPlan) -> dict[str, Path]:
     """
-    Reconstruit {source_key: final_path} depuis les PreprocessingPlan exécutés.
-    Appelé après la barrière preprocessing pour alimenter les recalages.
+    Rebuilds {source_key: final_path} from the executed PreprocessingPlans.
+    Called after the preprocessing barrier to feed the re-alignments.
     """
     result = {
         key: preproc_plan.final_path
@@ -89,9 +88,9 @@ def _collect_preprocessed(plan: SessionPlan) -> dict[str, Path]:
 
 def _collect_transform_prefixes(plan: SessionPlan) -> dict[str, Path]:
     """
-    Reconstruit {source_key: out_prefix} depuis les RegistrationJob exécutés.
-    Appelé après la barrière registration pour alimenter les apply transforms.
-    Vérifie que les fichiers de transform existent.
+    Reconstructs {source_key: out_prefix} from the executed RegistrationJobs.
+    Called after the registration barrier to feed the apply transforms.
+    Checks that the transform files exist.
     """
     prefixes = {}
     errors = []
@@ -101,19 +100,19 @@ def _collect_transform_prefixes(plan: SessionPlan) -> dict[str, Path]:
         affine = prefix.parent / f"{prefix.name}0GenericAffine.mat"
 
         if not affine.exists():
-            errors.append(f"Transform manquant pour '{job.source_key}' : {affine}")
+            errors.append(f"Missing transform for '{job.source_key}' : {affine}")
             continue
 
         prefixes[job.source_key] = prefix
         logger.debug(
-            "Transform prefix collecté [%s] : %s",
+            "Collected prefix [%s] : %s",
             job.source_key,
             prefix.name,
         )
 
     if errors:
         raise RuntimeError(
-            f"{len(errors)} transform(s) manquant(s) après recalage :\n"
+            f"{len(errors)} missing transform(s) after realignment :\n"
             + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -133,14 +132,14 @@ def run_session_parallel(
     n_workers: int = 1,
 ) -> None:
     """
-    Exécute le plan complet d'une session avec parallélisme intra-session.
+    Executes the entire session plan with intra-session parallelism.
 
-    Trois étapes séquentielles séparées par des barrières implicites
-    (joblib attend que tous les jobs soient finis avant de passer à l'étape suivante) :
+    Three sequential steps separated by implicit barriers
+    (joblib waits for all jobs to finish before moving on to the next step):
 
-      1. Preprocessing  — tous les preproc en parallèle
-      2. Registration   — tous les recalages en parallèle
-      3. Apply          — tous les apply transforms en parallèle
+      1. Preprocessing  — all preprocessing runs in parallel
+      2. Registration   — all registration runs in parallel
+      3. Apply          — all apply transforms run in parallel
     """
     config_template = parse_registration_config(reg_config_template)
     config_qmri = parse_registration_config(reg_config_qmri)
@@ -154,19 +153,19 @@ def run_session_parallel(
         len(plan.apply_jobs),
     )
 
-    # ── Étape 1 : preprocessing ──────────────────────────────────────────
-    logger.info("[sub-%s ses-%s] Étape 1/3 : preprocessing", plan.subject, plan.session)
+    # ── Step 1 : preprocessing ─────────────────────────────────────────
+    logger.info("[sub-%s ses-%s] Step 1/3 : preprocessing", plan.subject, plan.session)
 
     Parallel(n_jobs=n_workers, backend="loky")(
         delayed(run_preprocessing_plan)(preproc_plan, force)
         for preproc_plan in plan.preprocessing_plans.values()
     )
 
-    # ── Barrière 1 → reconstruction des paths préprocessés ───────────────
+    # ── Barrier 1 → reconstruction of preprocessed paths ───────────────
     preprocessed = _collect_preprocessed(plan)
 
-    # ── Étape 2 : recalages ──────────────────────────────────────────────
-    logger.info("[sub-%s ses-%s] Étape 2/3 : recalages", plan.subject, plan.session)
+    # ── Step 2 : registrations ─────────────────────────────────────────
+    logger.info("[sub-%s ses-%s] Step 2/3 : registration", plan.subject, plan.session)
 
     Parallel(n_jobs=n_workers, backend="loky")(
         delayed(_run_registration_job)(
@@ -174,18 +173,17 @@ def run_session_parallel(
             preprocessed=preprocessed,
             config_template=config_template,
             config_qmri=config_qmri,
-            n_workers=n_workers,
             force=force,
         )
         for job in plan.registration_jobs
     )
 
-    # ── Barrière 2 → reconstruction des prefixes de transforms ───────────
+    # ── Barrier 2 → reconstruction of transform prefixes ───────────
     transform_prefixes = _collect_transform_prefixes(plan)
 
-    # ── Étape 3 : apply transforms ───────────────────────────────────────
+    # ── Step 3 : apply transforms ───────────────────────────────────────
     logger.info(
-        "[sub-%s ses-%s] Étape 3/3 : apply transforms", plan.subject, plan.session
+        "[sub-%s ses-%s] Step 3/3 : apply transforms", plan.subject, plan.session
     )
 
     apply_args = _build_apply_args(plan, transform_prefixes)
@@ -195,7 +193,7 @@ def run_session_parallel(
     )
 
     logger.info(
-        "Session sub-%s ses-%s terminée — %d qmap(s) dans l'espace template.",
+        "Session sub-%s ses-%s Done — %d qmap(s) in the template space.",
         plan.subject,
         plan.session,
         len(plan.apply_jobs),
@@ -203,7 +201,7 @@ def run_session_parallel(
 
 
 # ─────────────────────────────────────────
-# Helpers privés — jobs unitaires
+# Private helpers — unit tests
 # ─────────────────────────────────────────
 
 
@@ -212,10 +210,9 @@ def _run_registration_job(
     preprocessed: dict[str, Path],
     config_template,
     config_qmri,
-    n_workers: int,
     force: bool,
 ) -> None:
-    """Exécute un RegistrationJob unique avec les paths préprocessés."""
+    """Runs a single RegistrationJob using the preprocessed paths."""
     from registrabids.pipeline.registration import run_registration
 
     if job.job_type == "ref_to_template":
@@ -241,8 +238,8 @@ def _build_apply_args(
     transform_prefixes: dict[str, Path],
 ) -> list[tuple]:
     """
-    Construit la liste des (ApplyTransformJob, transforms) pour l'étape 3.
-    Filtre les jobs dont le source_key n'a pas de transform associé.
+    Builds the list of (ApplyTransformJob, transforms) for step 3.
+    Filters out jobs whose source_key does not have an associated transform.
     """
     args = []
     prefix_template = transform_prefixes["ref"]
@@ -251,7 +248,7 @@ def _build_apply_args(
         prefix_source = transform_prefixes.get(app_job.source_key)
         if prefix_source is None:
             logger.error(
-                "Pas de transform pour source_key='%s' — qmap ignorée : %s",
+                "No transform for source_key='%s' — qmap ignored : %s",
                 app_job.source_key,
                 app_job.qmap.name,
             )
@@ -267,7 +264,7 @@ def _build_apply_args(
 
 
 def _apply_one(job, transforms):
-    """Wrapper pour _apply_transforms compatible joblib."""
+    """A joblib-compatible wrapper for _apply_transforms."""
     from registrabids.pipeline.runner import _apply_transforms
 
     _apply_transforms(job, transforms)
