@@ -1,20 +1,21 @@
 import logging
-from pathlib import Path
-from registrabids.core.bids_index import BIDSIndex
-from registrabids.core.resolver import ReferenceResolver, RegistrationPlanner
-from registrabids.core.planner import SessionPlan, RegistrationJob, ApplyTransformJob
-from registrabids.pipeline.registration import (
-    run_registration, parse_registration_config
-)
-from registrabids.core.template import TemplateLoader
-from registrabids.pipeline.preprocessing import run_preprocessing_plan
-logger = logging.getLogger(__name__)
-
 import nibabel as nib
 import numpy as np
 import tempfile
 from pathlib import Path
 import shutil
+
+from registrabids.core.bids_index import BIDSIndex
+from registrabids.core.resolver import ReferenceResolver, RegistrationPlanner
+from registrabids.core.planner import SessionPlan, ApplyTransformJob
+from registrabids.pipeline.registration import (
+    run_registration,
+    parse_registration_config,
+)
+from registrabids.core.template import TemplateLoader
+from registrabids.pipeline.preprocessing import run_preprocessing_plan
+
+logger = logging.getLogger(__name__)
 
 
 def _make_reference_grid(
@@ -43,14 +44,15 @@ def _make_reference_grid(
     new_shape = np.round(tpl_shape * (tpl_voxsize / qmap_voxsize)).astype(int)
 
     # new affine matrix : same origin and orientation as the template,
-    # but qmap voxel size 
+    # but qmap voxel size
     scaling = np.diag(qmap_voxsize / tpl_voxsize)
     new_affine = tpl_affine.copy()
     new_affine[:3, :3] = tpl_affine[:3, :3] @ scaling
 
     logger.debug(
         "Hybrid grid : shape %s → %s | voxsize %s → %s",
-        tuple(tpl_shape), tuple(new_shape),
+        tuple(tpl_shape),
+        tuple(new_shape),
         np.round(tpl_voxsize, 3).tolist(),
         np.round(qmap_voxsize, 3).tolist(),
     )
@@ -64,6 +66,7 @@ def _make_reference_grid(
     nib.save(ref_img, ref_path)
     return ref_path
 
+
 def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     """
     Call antsApplyTransforms to map the qmap into the template space.
@@ -73,11 +76,12 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     if job.out_path.exists() and job.out_path.stat().st_size > 0:
         logger.info("Skip apply — output déjà existant : %s", job.out_path.name)
         return
-    
+
     import subprocess
+
     job.out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_ref_", dir="/tmp"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_ref_"))
 
     try:
         ref_grid = _make_reference_grid(
@@ -87,12 +91,18 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
         )
         cmd = [
             "antsApplyTransforms",
-            "-d", "3",
-            "-e", "3",
-            "-i", str(job.qmap),
-            "-r", str(ref_grid),   
-            "-o", str(job.out_path),
-            "--interpolation", "Linear",
+            "-d",
+            "3",
+            "-e",
+            "3",
+            "-i",
+            str(job.qmap),
+            "-r",
+            str(ref_grid),
+            "-o",
+            str(job.out_path),
+            "--interpolation",
+            "Linear",
         ]
         for t in transforms:
             cmd += ["-t", t]
@@ -103,16 +113,16 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
-                f"antsApplyTransforms a échoué pour {job.qmap.name} :\n"
-                f"{result.stderr}"
+                f"antsApplyTransforms a échoué pour {job.qmap.name} :\n{result.stderr}"
             )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
+
 def run_session(
     plan: SessionPlan,
-    reg_config_template: dict,   # bloc YAML registration.ref_to_template
-    reg_config_qmri: dict,      # bloc YAML registration.ref_to_qmri 
+    reg_config_template: dict,  # bloc YAML registration.ref_to_template
+    reg_config_qmri: dict,  # bloc YAML registration.ref_to_qmri
     force: bool = False,
 ) -> None:
     """
@@ -123,7 +133,7 @@ def run_session(
     config_template = parse_registration_config(reg_config_template)
     config_qmri = parse_registration_config(reg_config_qmri)
 
-    # Preprocessing 
+    # Preprocessing
     preprocessed: dict[str, Path] = {}
 
     for source_key, preproc_plan in plan.preprocessing_plans.items():
@@ -137,11 +147,11 @@ def run_session(
 
     for job in plan.registration_jobs:
         if job.job_type == "ref_to_template":
-            fixed = job.fixed        # template — inchangé, jamais préprocessé
-            moving = preprocessed.get("ref", job.moving)   # ref préprocessée
+            fixed = job.fixed  # template — inchangé, jamais préprocessé
+            moving = preprocessed.get("ref", job.moving)  # ref préprocessée
         else:
             # source_to_ref
-            fixed = preprocessed.get("ref", job.fixed)     # ref préprocessée
+            fixed = preprocessed.get("ref", job.fixed)  # ref préprocessée
             moving = preprocessed.get(job.source_key, job.moving)  # source préprocessée
 
         cfg = config_template if job.job_type == "ref_to_template" else config_qmri
@@ -163,25 +173,31 @@ def run_session(
         if prefix_source is None:
             logger.error(
                 "No transform found for source_key='%s', qmap ignored : %s",
-                app_job.source_key, app_job.qmap.name,
+                app_job.source_key,
+                app_job.qmap.name,
             )
             continue
 
         # ANTs order: from newest to oldest
         # T(ref→template) ∘ T(source→ref)
         transforms = [
-            f"{prefix_template}1Warp.nii.gz",       # warp SyN
+            f"{prefix_template}1Warp.nii.gz",  # warp SyN
             f"{prefix_template}0GenericAffine.mat",  # affine ref→template
-            f"{prefix_source}0GenericAffine.mat",    # affine source→ref
+            f"{prefix_source}0GenericAffine.mat",  # affine source→ref
         ]
         _apply_transforms(app_job, transforms)
 
     logger.info(
         "Session sub-%s ses-%s done — %d qmaps in the template space.",
-        plan.subject, plan.session, len(plan.apply_jobs),
+        plan.subject,
+        plan.session,
+        len(plan.apply_jobs),
     )
 
-def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, force: bool = False) -> None:
+
+def run_pipeline(
+    bids_root: str, config: dict, output_dir: Path | None = None, force: bool = False
+) -> None:
     """
     Main entry point.
     config: a dictionary derived from the full YAML file.
@@ -194,11 +210,11 @@ def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, 
 
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
-    
+
     atlas = TemplateLoader.from_config(config["template"])
     template = atlas.template
 
-    #output_root = Path(bids_root) / "derivatives" / "registrabids"
+    # output_root = Path(bids_root) / "derivatives" / "registrabids"
     planner = RegistrationPlanner(index.layout, template, output_root)
 
     reference_map = resolver.extract_reference_map(config)
@@ -221,7 +237,7 @@ def run_pipeline(bids_root: str, config: dict,  output_dir: Path | None = None, 
             source_map=source_map,
             preproc_config=preproc_config,
         )
-        #print(plan.registration_jobs)
+        # print(plan.registration_jobs)
         try:
             run_session(
                 plan=plan,

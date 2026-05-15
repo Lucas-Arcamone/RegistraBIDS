@@ -11,9 +11,22 @@ dependencies = [
     "click"
 ]
 
+[project.scripts]
+registrabids = "registration.cli:main"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["registrabids*"]
+
+[tool.setuptools.package-data]
+registrabids = ["resources/**/*.nii.gz", "resources/**/*.tsv"]
+
+[feature.dev.dependencies]
+pre-commit = "*"
+ruff = ">=0.11"
+
+[feature.dev.tasks]
+lint = "ruff check registrabids/"
