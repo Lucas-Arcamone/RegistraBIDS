@@ -40,6 +40,11 @@ cd RegistraBIDS
 pixi install
 ```
 
+This repository use pre-commit:
+```bash
+pixi run pre-commit install
+```
+
 ---
 
 ## Dataset structure
@@ -64,7 +69,7 @@ my_dataset/
                 ├── sub-01_ses-..._MTRmap.json          ← must contain "Sources"
                 ├── sub-01_ses-..._MTsat.nii
                 ├── sub-01_ses-..._MTsat.json
-                ├── sub-01_ses-..._acq-OGSE_AD.nii  
+                ├── sub-01_ses-..._acq-OGSE_AD.nii
                 ├── sub-01_ses-..._acq-OGSE_AD.json
                 └── ...
 ```
@@ -98,7 +103,7 @@ reference:
 
 template:
   atlas: ABAv3
-  
+
 registration:
   ref_to_template:
     stages:
@@ -155,9 +160,9 @@ filter:
 
 If `filter` is absent, all subjects and sessions in the dataset are processed.
 
-### Perform preprocesssing 
-You can choose to apply preprocessing algorithm in order to improve registrations. 
-If `preprocessing` is absent, only the extraction is performed using the `first_volume` rule. 
+### Perform preprocesssing
+You can choose to apply preprocessing algorithm in order to improve registrations.
+If `preprocessing` is absent, only the extraction is performed using the `first_volume` rule.
 With the `save_intermediates` extractor you can choose to save intermediate (use bool: true or false) files from extraction, denoiser and n4 process.
 
 ```yaml
@@ -203,17 +208,17 @@ preprocessing:
     search_radius: 3
 ```
 
-#### 4D to 3D strategies 
-The `volume_extraction` extractor consist of the strategy to go from a 4D volume to a 3D volume. You can control to apply the extraction strategy according to BIDS sidecars (e.g. suffix: MEGRE, echo: 01). Here are described the different strategies implemented  : 
+#### 4D to 3D strategies
+The `volume_extraction` extractor consist of the strategy to go from a 4D volume to a 3D volume. You can control to apply the extraction strategy according to BIDS sidecars (e.g. suffix: MEGRE, echo: 01). Here are described the different strategies implemented  :
  - `mean`: extract the mean volume;
  - `geometric_mean_shell` with `target_val` paramater: If `target_val` is choosen to be 0, then a mean strategy is automatically applied otherwise concatenate the volume by applying geometric mean;
- - `weighted_mean_echo`: For multi-echoes acquisition, extract the weighted mean echo according to a naïve mono-exponential model approch. The first echoes are more weighted than the last ones maximizing the quality. 
- - `first_volume`: Extract the first volume.  
+ - `weighted_mean_echo`: For multi-echoes acquisition, extract the weighted mean echo according to a naïve mono-exponential model approch. The first echoes are more weighted than the last ones maximizing the quality.
+ - `first_volume`: Extract the first volume.
 
 #### Bias field correction
 You can choose to automatically applied N4 algorithm. This part use the `N4BiasFieldCorrection` command line, make shure you have access to this function in your computer.
 
-#### Denoising 
+#### Denoising
 Finally, you can choose to correct your data from noise using either MPPCA or NLMF strategies. Both denoising strategy use DIPY implementation. You can use to correct from Rician or Gaussian noise when using NLMF.
 
 ### Configuration reference
@@ -247,7 +252,7 @@ pixi run python -m registrabids.cli /path/to/my_dataset \
   --config /path/to/config.yaml \
   --log-level DEBUG
   --output-dir /path/to/a/different/directory/
-  --force 
+  --force
 ```
 
 ---
@@ -264,7 +269,7 @@ derivatives/registrabids/
         │   ├── ref
         │   │   ├── ref_denoised.nii.gz
         │   │   └── ref_N4.nii.gz
-        │   └── ...      
+        │   └── ...
         ├── ref_to_template/
         │   ├── ref_to_template_0GenericAffine.mat
         │   ├── ref_to_template_1Warp.nii.gz
@@ -309,7 +314,7 @@ print(TemplateLoader().available_atlases())
 ## Troubleshooting
 
 **`ValueError: 'acq' is not a recognized entity.` when using config file.**
-The available entities may differ from BIDS sidecars. For example `acq` is not recognize so you need to use `acquisition`. To find out which entities you can choose, you can use the following code: 
+The available entities may differ from BIDS sidecars. For example `acq` is not recognize so you need to use `acquisition`. To find out which entities you can choose, you can use the following code:
 ```python
 from bids import BIDSLayout
 layout = BIDSLayout('/path/to/dataset/', validate = False)
