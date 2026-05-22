@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Lucas ARCAMONE
 
 from bids import BIDSLayout
+from pathlib import Path
 from collections import defaultdict
 import logging
 
@@ -33,7 +34,7 @@ class BIDSIndex:
         subjects = filter_cfg.get("subjects")
         sessions = filter_cfg.get("sessions")
 
-        query = {"scope": "qmri", "extension": [".nii", ".nii.gz"]}
+        query = {"scope": "derivatives", "extension": [".nii", ".nii.gz"]}
 
         if subjects is not None:
             query["subject"] = subjects
@@ -83,14 +84,36 @@ class BIDSIndex:
         Retourne le mapping {qmap_path: [source_path, ...]}.
         """
         files = self.get_qmri_maps(config)
+
         mapping = {}
+        root = Path(self.layout.root)
 
         for f in files:
             metadata = f.get_metadata()
             srcs = metadata.get("Sources", [])
+
             if isinstance(srcs, str):
                 srcs = [srcs]
+            resolved = []
+
+            for src in srcs:
+                src_path = Path(src)
+                if not src_path.is_absolute():
+                    # Resolves the relative path from the root of the dataset
+                    src_path = (root / src_path).resolve()
+                    logger.debug(
+                        "Resolved relative path : %s → %s",
+                        src,
+                        src_path,
+                    )
+                if not src_path.exists():
+                    logger.warning(
+                        "Source not found for %s : %s",
+                        Path(f.path).name,
+                        src_path,
+                    )
+                resolved.append(str(src_path))
             mapping[f.path] = list(set(srcs))
 
-        logger.debug("%d qmap(s) avec sources extraites", len(mapping))
+        logger.debug("%d qmap(s) with extracted sources", len(mapping))
         return mapping
