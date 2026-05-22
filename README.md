@@ -4,7 +4,7 @@
 
 The pipeline handles the full registration workflow:
 - **Preprocessing** — automatic 4D→3D volume extraction with different strategy (e.g. mean, first volume, dwi geometric mean, etc.), optional denoising (NLMF, MPPCA) and bias field correction (N4), all configurable per acquisition type
-- **Registration** — SyN registration of the reference image to the atlas template, followed by rigid/affine registration of each source image to the reference
+- **Registration** — Rigid + Affine + SyN registration of the reference image to the atlas template, followed by Rigid + Affine registration of each source image to the reference. Initial transform can be automatized using `antsAI` method from ANTS toolbox.
 - **Transform application** — qMRI maps are brought into atlas space by chaining transforms, preserving their native resolution
 - **Parallelism** — sessions and intra-session jobs (preprocessing, registration, apply transforms) run in parallel via joblib, with automatic CPU allocation
 - **Resume support** — completed steps are automatically skipped on re-run; use `--force` to reprocess
@@ -20,6 +20,7 @@ The pipeline handles the full registration workflow:
   - [Minimal example](#minimal-example)
   - [Processing only specific subjects/sessions](#processing-only-specific-subjectssessions)
   - [Perform preprocesssing](#perform-preprocesssing)
+  - [Initialization of tpl / ref registrations](#initialization-of-the-tpl--ref-registration)
   - [Parallelism management](#parallelism-management)
   - [Configuration reference](#configuration-file)
 - [Running the pipeline](#running-the-pipeline)
@@ -95,7 +96,7 @@ my_dataset/
   "Sources": [
     "/absolute/path/to/sub-01/ses-.../anat/sub-01_ses-..._acq-refMT_run-02_T1w.nii.gz"
   ],
-  "ModalityType": "MTRmap"
+  "ModalityType": "MTRmap"       //optional
 }
 ```
 
@@ -235,6 +236,44 @@ You can choose to automatically applied N4 algorithm. This part use the `N4BiasF
 #### Denoising
 Finally, you can choose to correct your data from noise using either MPPCA or NLMF strategies. Both denoising strategy use DIPY implementation. You can use to correct from Rician or Gaussian noise when using NLMF.
 
+### Initialization of the tpl / ref registration
+
+Sometimes data are acquired in different orientations from the template, making center-of-mass initialization inefficient. This pipeline offers two options to handle this:
+
+**Option A — manual initializer**: provide your own initialization file, which will be applied to every tpl / ref registration step.
+
+**Option B — automatic initialization with antsAI**: if no manual initializer is provided, the pipeline automatically runs antsAI before each tpl / ref registration to generate a session-specific initialization file. Be careful: computation time can grow exponentially with the search parameters. The goal is not a perfect initialization but a close enough starting point to ensure convergence in the right direction.
+
+```yaml
+registration:
+  ref_to_template:
+
+    # Option A — manual initializer (disables antsAI)
+    init_transform: "path/to/init_transform.txt"
+
+    # Option B — automatic antsAI (if init_transform is absent)
+    ants_ai:
+      metric: Mattes              # MI | Mattes | GC
+      metric_params:
+        bins: 32
+        sampling: Regular
+        sampling_rate: 0.6
+      transform: Affine           # Rigid | Similarity | Affine
+      convergence: 0.1            # convergence threshold
+      search_factor: 30           # search step size in degrees
+      arc_fraction: 1.0           # angular coverage (0–1); 1.0 = full space
+      nbr_iteration: 10           # number of random restarts
+      resample:
+        enabled: true             # resample images before antsAI to speed up
+        spacing: [0.15, 0.15, 0.15]  # target resolution in mm
+      verbose: true
+
+    stages:
+      ...
+```
+
+If both `init_transform` and `ants_ai` are specified, `init_transform` takes precedence and antsAI is skipped.
+
 ### Parallelism management
 
 This pipeline automatically uses available resources to run processes in parallel. You can control parallelism via the configuration file:
@@ -288,6 +327,7 @@ significantly accelerating the SyN step.
 | `reference` | ✅ | BIDS entities identifying the reference image (T1w, acq, run, etc.) |
 | `template.atlas` | ✅ | Name of the atlas folder inside `resources/` |
 | `registration.ref_to_template` | ✅ | ANTs stages for reference → atlas registration (typically Rigid + Affine + SyN) |
+| `registration.ref_to_template.ants_ai` | ❌ | Run antsAI to find initialization transform. |
 | `registration.ref_to_qmri` | ✅ | ANTs stages for source → reference registration (typically Rigid + Affine) |
 | `filter.subjects` | ❌ | List of subject IDs to process. If absent: all subjects |
 | `filter.sessions` | ❌ | List of session IDs to process. If absent: all sessions |
