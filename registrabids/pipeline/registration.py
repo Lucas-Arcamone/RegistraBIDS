@@ -5,7 +5,7 @@ import subprocess
 import logging
 import os
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -69,9 +69,26 @@ class StageConfig:
 
 
 @dataclass
+class AntsAIConfig:
+    metric: str = "Mattes"
+    bins: int = 32
+    sampling: str = "Regular"
+    sampling_rate: float = 0.2
+    transform: str = "Affine"  # Rigid | Similarity | Affine
+    convergence: int = 20
+    search_factor: float = 0.15
+    arc_fraction: float = 1.0
+    nbr_iteration: int = 10
+    resample_enabled: bool = True
+    resample_spacing: list[float] = field(default_factory=lambda: [0.1, 0.1, 0.1])
+    verbose: bool = True
+
+
+@dataclass
 class RegistrationConfig:
     stages: list[StageConfig]
-    init_transform: Optional[str] = None
+    init_transform: str | None = None
+    ants_ai: AntsAIConfig | None = None  # ← nouveau
     verbose: bool = True
     dimensionality: int = 3
 
@@ -104,15 +121,38 @@ def _parse_stage(cfg: dict) -> StageConfig:
     )
 
 
+def _parse_ants_ai(cfg: dict) -> AntsAIConfig:
+    p = cfg.get("metric_params", {})
+    rs = cfg.get("resample", {})
+    return AntsAIConfig(
+        metric=cfg.get("metric", "Mattes"),
+        bins=p.get("bins", 32),
+        sampling=p.get("sampling", "Regular"),
+        sampling_rate=p.get("sampling_rate", 0.2),
+        transform=cfg.get("transform", "Affine"),
+        convergence=cfg.get("convergence", 0.1),
+        search_factor=cfg.get("search_factor", 20),
+        arc_fraction=cfg.get("arc_fraction", 1.0),
+        nbr_iteration=cfg.get("nbr_iteration", 10),
+        resample_enabled=rs.get("enabled", True),
+        resample_spacing=rs.get("spacing", [0.1, 0.1, 0.1]),
+        verbose=cfg.get("verbose", True),
+    )
+
+
 def parse_registration_config(reg_cfg: dict) -> RegistrationConfig:
-    """
-    Reçoit le bloc YAML d'une registration (ref_to_template ou ref_to_qmri).
-    Retourne un RegistrationConfig validé.
-    """
     stages = [_parse_stage(s) for s in reg_cfg["stages"]]
+
+    # init_transform fourni → antsAI désactivé
+    init_transform = reg_cfg.get("init_transform")
+    ants_ai = None
+    if not init_transform and "ants_ai" in reg_cfg:
+        ants_ai = _parse_ants_ai(reg_cfg["ants_ai"])
+
     return RegistrationConfig(
         stages=stages,
-        init_transform=reg_cfg.get("init_transform"),
+        init_transform=init_transform,
+        ants_ai=ants_ai,
         verbose=reg_cfg.get("verbose", True),
         dimensionality=reg_cfg.get("dimensionality", 3),
     )
@@ -128,6 +168,7 @@ def _build_command(
     moving: str,
     out_prefix: str,
     config: RegistrationConfig,
+    init_transform: str | None = None,  # ← Resolved before
 ) -> list[str]:
     warped = f"{out_prefix}_warped.nii.gz"
     inv_warped = f"{out_prefix}_inv_warped.nii.gz"
@@ -142,8 +183,8 @@ def _build_command(
         f"[{out_prefix},{warped},{inv_warped}]",
     ]
 
-    if config.init_transform:
-        cmd += ["-r", config.init_transform]
+    if init_transform:
+        cmd += ["-r", init_transform]
 
     for stage in config.stages:
         cmd += ["-m", stage.metric.to_ants_string(fixed, moving)]
@@ -188,6 +229,111 @@ def _verify_nifti(path: Path) -> None:
         )
 
 
+def run_ants_ai(
+    fixed: Path,
+    moving: Path,
+    out_prefix: Path,
+    config: AntsAIConfig,
+) -> Path:
+    """
+    Lance antsAI pour trouver une transformation d'initialisation.
+    Retourne le path du .mat produit.
+    """
+    import tempfile
+
+    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    init_out = out_prefix.parent / f"{out_prefix.name}_antsAI_init.mat"
+
+    # Skip si déjà calculé
+    if init_out.exists() and init_out.stat().st_size > 0:
+        logger.info("Skip antsAI — init déjà existant : %s", init_out.name)
+        return init_out
+
+    # ── Rééchantillonnage si demandé ────────────────────────────────────
+    if config.resample_enabled:
+        spacing_str = "x".join(str(s) for s in config.resample_spacing)
+        tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_ai_", dir="/tmp"))
+        fixed_rs = tmp_dir / f"fixed_rs_{fixed.name}"
+        moving_rs = tmp_dir / f"moving_rs_{moving.name}"
+
+        for src, dst in [(fixed, fixed_rs), (moving, moving_rs)]:
+            result = subprocess.run(
+                [
+                    "ResampleImage",
+                    "3",
+                    str(src),
+                    str(dst),
+                    spacing_str,
+                    "0",  # interpolation: linear
+                    "0",  # image type: scalar
+                ],
+                capture_output=True,
+                text=True,
+                env=_ants_env(),
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"ResampleImage a échoué pour {src.name} :\n{result.stderr}"
+                )
+        fixed_in = fixed_rs
+        moving_in = moving_rs
+        logger.info(
+            "Rééchantillonnage pour antsAI : %s → spacing %s",
+            fixed.name,
+            spacing_str,
+        )
+    else:
+        fixed_in = fixed
+        moving_in = moving
+        tmp_dir = None
+
+    # ── Commande antsAI ─────────────────────────────────────────────────
+    metric_str = (
+        f"{config.metric}[{fixed_in},{moving_in},"
+        f"{config.bins},{config.sampling},{config.sampling_rate}]"
+    )
+
+    cmd = [
+        "antsAI",
+        "-d",
+        "3",
+        "-m",
+        metric_str,
+        "-t",
+        f"{config.transform}[{config.convergence}]",
+        "-s",
+        f"[{config.search_factor},{config.arc_fraction}]",
+        "-p",
+        "1",
+        "-c",
+        f"{config.nbr_iteration}",
+        "-o",
+        str(init_out),
+    ]
+
+    if config.verbose:
+        cmd += ["--verbose", "1"]
+
+    logger.info("Lancement antsAI : %s → %s", moving.name, fixed.name)
+    logger.debug("Commande antsAI : %s", " ".join(cmd))
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"antsAI a échoué :\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    # Nettoyage des images rééchantillonnées
+    if tmp_dir is not None:
+        import shutil
+
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    logger.info("antsAI terminé → %s", init_out.name)
+    return init_out
+
+
 # ─────────────────────────────────────────
 # Fonction principale
 # ─────────────────────────────────────────
@@ -225,7 +371,19 @@ def run_registration(
 
     log_file = log_file or out_prefix.with_suffix(".log")
 
-    cmd = _build_command(str(fixed), str(moving), str(out_prefix), config)
+    # ── Resolution of init_transform ──────────────────────────────────
+    init_transform = config.init_transform
+
+    if init_transform is None and config.ants_ai is not None:
+        init_transform = str(run_ants_ai(fixed, moving, out_prefix, config.ants_ai))
+        logger.info("Init transform (antsAI) : %s", init_transform)
+    elif init_transform:
+        logger.info("Init transform (manual) : %s", init_transform)
+
+    # ── Construction and Execution of the ANTs Command ───────────────────
+    cmd = _build_command(
+        str(fixed), str(moving), str(out_prefix), config, init_transform
+    )
 
     logger.info("Run ANTs : %s → %s", moving.name, fixed.name)
     logger.debug("Command : %s", " ".join(cmd))
