@@ -145,8 +145,10 @@ def parse_registration_config(reg_cfg: dict) -> RegistrationConfig:
 
     # init_transform fourni → antsAI désactivé
     init_transform = reg_cfg.get("init_transform")
+    use_ants_ai = reg_cfg.get("use_ants_ai", True)
+
     ants_ai = None
-    if not init_transform and "ants_ai" in reg_cfg:
+    if not init_transform and use_ants_ai and "ants_ai" in reg_cfg:
         ants_ai = _parse_ants_ai(reg_cfg["ants_ai"])
 
     return RegistrationConfig(
