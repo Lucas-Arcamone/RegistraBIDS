@@ -129,6 +129,14 @@ def _source_key(source_path: str) -> str:
     return "_".join(p for p in parts if not p.startswith(("sub-", "ses-")))
 
 
+def _clean_stem(path: Path) -> str:
+    name = path.name
+    for ext in (".nii.gz", ".nii"):
+        if name.endswith(ext):
+            return name[: -len(ext)]
+    return path.stem
+
+
 class RegistrationPlanner:
     def __init__(self, layout, template: Path, output_root: Path):
         self.layout = layout
@@ -202,11 +210,8 @@ class RegistrationPlanner:
                 )
 
             # ── Apply job pour cette qmap ────────────────────────────────
-            qmap_out_name = (
-                Path(qmap_path)
-                .name.replace(".nii.gz", "_space-template.nii.gz")
-                .replace(".nii", "_space-template.nii.gz")
-            )
+            stem = _clean_stem(Path(qmap_path))
+            qmap_out_name = f"{stem}_space-template.nii.gz"
 
             plan.apply_jobs.append(
                 ApplyTransformJob(
@@ -236,7 +241,7 @@ class RegistrationPlanner:
                 preproc_config=preproc_config,
                 out_base=out_base,
             )
-            self._log_plan(plan)
+        self._log_plan(plan)
         return plan
 
     def _log_plan(self, plan: SessionPlan) -> None:

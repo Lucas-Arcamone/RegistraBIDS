@@ -213,8 +213,8 @@ def run_volume_extraction(job: VolumeExtractionJob) -> None:
 def _geometric_mean_shell(
     file_path: Path, data: np.ndarray, params: dict
 ) -> np.ndarray:
-    """Geometric mean of the volumes if bval >= 50 for a target DWI shell
-    Arithmetic mean if bval < 50."""
+    """Geometric mean of the volumes if bval >= 100 for a target DWI shell
+    Arithmetic mean if bval < 100."""
     bval_path = file_path.with_suffix("").with_suffix(".bval")
     if not bval_path.exists():
         # Cherche dans le même dossier avec le même stem
@@ -226,7 +226,7 @@ def _geometric_mean_shell(
 
     bvals = np.loadtxt(bval_path)
     target = params.get("target_bval", 0)
-    tolerance = params.get("bval_tolerance", 50)
+    tolerance = params.get("bval_tolerance", 100)
     indices = np.where(np.abs(bvals - target) <= tolerance)[0]
 
     if len(indices) == 0:
