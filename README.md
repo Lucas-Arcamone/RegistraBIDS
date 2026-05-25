@@ -240,18 +240,26 @@ Finally, you can choose to correct your data from noise using either MPPCA or NL
 
 Sometimes data are acquired in different orientations from the template, making center-of-mass initialization inefficient. This pipeline offers two options to handle this:
 
-**Option A — manual initializer**: provide your own initialization file, which will be applied to every tpl / ref registration step.
+**Option A — manual initializer**: provide your own initialization file, which will be applied to every tpl / ref registration step. When provided, the pipeline will automatically use it without checking the `use_ants_ai` flag or `ants_ai` block (see the priority table below).
 
-**Option B — automatic initialization with antsAI**: if no manual initializer is provided, the pipeline automatically runs antsAI before each tpl / ref registration to generate a session-specific initialization file. Be careful: computation time can grow exponentially with the search parameters. The goal is not a perfect initialization but a close enough starting point to ensure convergence in the right direction.
+**Option B — automatic initialization with antsAI**: if no manual initializer is provided, the pipeline automatically runs antsAI before each tpl / ref registration to generate a session-specific initialization file except if you specified `use_ants_ai = false` . Be careful: computation time can grow exponentially with the search parameters. The goal is not a perfect initialization but a close enough starting point to ensure convergence in the right direction.
+
+Here the priority table:
+| `init_transform` | `use_ants_ai` | `ants_ai` block | Result |
+|---|---|---|---|
+| provided | any | any | Manual initializer used, antsAI skipped |
+| absent | `true` (default) | provided | antsAI runs automatically |
+| absent | `true` (default) | absent | No initialization |
+| absent | `false` | any | No initialization, antsAI skipped |
 
 ```yaml
 registration:
   ref_to_template:
-
     # Option A — manual initializer (disables antsAI)
     init_transform: "path/to/init_transform.txt"
 
-    # Option B — automatic antsAI (if init_transform is absent)
+    # Option B — automatic antsAI (if init_transform is absent and use_ants_ai is True or absent)
+    use_ants_ai: false # does not have the priority on init_transform
     ants_ai:
       metric: Mattes              # MI | Mattes | GC
       metric_params:
@@ -271,8 +279,6 @@ registration:
     stages:
       ...
 ```
-
-If both `init_transform` and `ants_ai` are specified, `init_transform` takes precedence and antsAI is skipped.
 
 ### Parallelism management
 
