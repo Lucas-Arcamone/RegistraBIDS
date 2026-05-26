@@ -32,7 +32,7 @@ class ReferenceResolver:
                 "Check the BIDS structure or your filters. "
             )
 
-        logger.info("%d pair(s) (sub, his) to be processed.", len(pairs))
+        logger.info("%d pair(s) (sub, ses) to be processed.", len(pairs))
 
         reference_map = {}
         errors = []

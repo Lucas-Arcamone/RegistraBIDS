@@ -27,8 +27,8 @@ class BIDSIndex:
 
     def get_qmri_maps(self, config: dict, suffixes=None):
         """
-        Récupère les qmri maps filtrées selon config['filter'] si présent.
-        suffixes : optionnel pour filtrer par suffix (ex: ['MTRmap', 'MTsat'])
+        Retrieves the qmri maps filtered according to config['filter'], if present.
+        suffixes: optional, to filter by suffix (ex: ['MTRmap', 'MTsat'])
         """
         filter_cfg = config.get("filter", {})
         subjects = filter_cfg.get("subjects")
@@ -55,7 +55,7 @@ class BIDSIndex:
 
         if len(valid_files) < len(files):
             logger.debug(
-                "%d fichier(s) qmri sans subject/session ignoré(s)",
+                "%d qmri file(s) without a subject or session have been ignored",
                 len(files) - len(valid_files),
             )
 
@@ -63,7 +63,7 @@ class BIDSIndex:
 
     def get_qmri_maps_grouped(self, config: dict):
         """
-        Retourne les qmri maps groupées par (subject, session).
+        Returns the qMRI maps grouped by (subject, session).
         {('M30', '01'): [BIDSImageFile, ...], ...}
         """
         files = self.get_qmri_maps(config)
@@ -76,12 +76,12 @@ class BIDSIndex:
             if sub is not None and ses is not None:
                 grouped[(sub, ses)].append(f)
 
-        logger.info("%d couple(s) (sub, ses) avec qmri maps trouvé(s)", len(grouped))
+        logger.info("%d pair(s) (sub, ses) with qmri maps found", len(grouped))
         return grouped
 
     def map_to_sources(self, config: dict):
         """
-        Retourne le mapping {qmap_path: [source_path, ...]}.
+        Return the mapping {qmap_path: [source_path, ...]}.
         """
         files = self.get_qmri_maps(config)
 
