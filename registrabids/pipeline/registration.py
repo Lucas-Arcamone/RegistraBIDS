@@ -238,8 +238,8 @@ def run_ants_ai(
     config: AntsAIConfig,
 ) -> Path:
     """
-    Lance antsAI pour trouver une transformation d'initialisation.
-    Retourne le path du .mat produit.
+    Run antsAI to find an initialization transformation.
+    Returns the path to the generated .mat file.
     """
     import tempfile
 
@@ -248,7 +248,7 @@ def run_ants_ai(
 
     # Skip si déjà calculé
     if init_out.exists() and init_out.stat().st_size > 0:
-        logger.info("Skip antsAI — init déjà existant : %s", init_out.name)
+        logger.info("Skip antsAI — init already exist : %s", init_out.name)
         return init_out
 
     # ── Rééchantillonnage si demandé ────────────────────────────────────
@@ -360,7 +360,7 @@ def run_registration(
 
     # Le recalage est considéré terminé si le warped existe et est non vide
     if not force and warped.exists() and warped.stat().st_size > 0:
-        logger.info("Skip recalage — output déjà existant : %s", warped.name)
+        logger.info("Skip registration — output already exist : %s", warped.name)
         return {
             "warped": warped,
             "inv_warped": out_prefix.parent / f"{out_prefix.name}_inv_warped.nii.gz",
