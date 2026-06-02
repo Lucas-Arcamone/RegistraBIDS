@@ -79,7 +79,7 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
                  from newest to oldest (ANTs convention).
     """
     if job.out_path.exists() and job.out_path.stat().st_size > 0:
-        logger.info("Skip apply — output déjà existant : %s", job.out_path.name)
+        logger.info("Skip apply — output already exist : %s", job.out_path.name)
         return
 
     import subprocess
@@ -87,7 +87,6 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
     job.out_path.parent.mkdir(parents=True, exist_ok=True)
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="registrabids_ref_"))
-
     try:
         ref_grid = _make_reference_grid(
             template_path=job.space_ref,
@@ -107,18 +106,19 @@ def _apply_transforms(job: ApplyTransformJob, transforms: list[str]) -> None:
             "-o",
             str(job.out_path),
             "--interpolation",
-            "Linear",
+            job.interpolator,
         ]
         for t in transforms:
             cmd += ["-t", t]
 
         logger.info("Applying transforms → %s", job.out_path.name)
+        logger.info("Interpolator → %s", job.interpolator)
         logger.debug("Command : %s", " ".join(cmd))
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
-                f"antsApplyTransforms a échoué pour {job.qmap.name} :\n{result.stderr}"
+                f"antsApplyTransforms failed for {job.qmap.name} :\n{result.stderr}"
             )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -245,6 +245,7 @@ def run_pipeline(
             qmri_files=qmri_files,
             source_map=source_map,
             preproc_config=preproc_config,
+            interpolator=config["registration"].get("interpolator", "Linear"),
         )
 
         session_plans.append(plan)

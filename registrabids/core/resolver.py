@@ -151,6 +151,7 @@ class RegistrationPlanner:
         qmri_files,  # liste de BIDSImageFile
         source_map: dict,  # {qmap_path: [source_path, ...]}
         preproc_config: dict,
+        interpolator: str = "Linear",
     ) -> SessionPlan:
         """
         Build the complete plan for a (sub, ses):
@@ -219,6 +220,7 @@ class RegistrationPlanner:
                     source_key=key,
                     out_path=out_base / "warped" / qmap_out_name,
                     space_ref=self.template,
+                    interpolator=interpolator,
                 )
             )
 

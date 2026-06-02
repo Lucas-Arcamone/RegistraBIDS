@@ -30,6 +30,7 @@ class ApplyTransformJob:
     source_key: str  # doit matcher un RegistrationJob.source_key
     out_path: Path
     space_ref: Path
+    interpolator: str = "Linear"
 
 
 # ─────────────────────────────────────────
