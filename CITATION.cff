@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "RegistraBIDS"
+version: 0.1.0
+date-released: 2026-05-25
+authors:
+  - family-names: Arcamone
+    given-names: Lucas
+    orcid: "https://orcid.org/0009-0006-1910-926X"
+    affiliation: "Robarts Research Institute, Western University"
+repository-code: "https://github.com/Lucas-Arcamone/RegistraBIDS"
+license: GPL-3.0
+doi: 10.5281/zenodo.22133247
+abstract: >
+  RegistraBIDS automates the registration of quantitative MRI maps
+  into a common atlas space from BIDS-compliant datasets using ANTs.
+keywords:
+  - MRI
+  - registration
+  - BIDS
+  - neuroimaging
+  - ANTs
