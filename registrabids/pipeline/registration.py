@@ -407,7 +407,19 @@ def run_registration(
             f"See log file : {log_file}"
         )
 
-    # Vérifie que les fichiers de sortie sont bien là et lisibles
+    if "Exception caught" in Path(log_file).read_text(errors="ignore"):
+        for end in (
+            "_warped.nii.gz",
+            "_inv_warped.nii.gz",
+            "0GenericAffine.mat",
+            "1Warp.nii.gz",
+            "1InverseWarp.nii.gz",
+        ):
+            (out_prefix.parent / f"{out_prefix.name}{end}").unlink(missing_ok=True)
+        raise RuntimeError(
+            f"antsRegistration reported an ITK exception (exit code 0). See log file : {log_file}"
+        )
+
     warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
     _verify_nifti(warped)
 

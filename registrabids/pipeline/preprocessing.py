@@ -123,7 +123,9 @@ def build_preprocessing_plan(
         current_path = ext_out
 
     # ── Step 2: denoising ────────────────────────────────────────────
-    if denoising_cfg.get("enabled", False):
+    if denoising_cfg.get("enabled", False) and suffix not in denoising_cfg.get(
+        "skip_suffixes", []
+    ):
         save_denoising = save_cfg.get("denoising", False)
 
         den_out = (
@@ -350,6 +352,7 @@ def run_denoising(job: DenoisingJob) -> None:
         )
 
     out_img = nib.Nifti1Image(denoised.astype(np.float32), img.affine, img.header)
+    out_img.set_data_dtype(np.float32)
     _save_nifti_safe(out_img, job.output_path)
     logger.info(
         "Débruitage [%s/%s] → %s", job.method, job.noise_model, job.output_path.name

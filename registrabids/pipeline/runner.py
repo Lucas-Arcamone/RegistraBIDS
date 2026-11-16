@@ -255,6 +255,7 @@ def run_pipeline(
             source_map=source_map,
             preproc_config=preproc_config,
             interpolator=config["registration"].get("interpolator", "Linear"),
+            source_overrides=config["registration"].get("source_overrides"),
         )
 
         session_plans.append(plan)
