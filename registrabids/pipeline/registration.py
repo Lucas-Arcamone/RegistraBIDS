@@ -205,12 +205,14 @@ def _build_command(
 
 def _ants_env() -> dict:
     """
-    Environment variables to force gzip compression in ANTs output.
-    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: stability
+    Environment for ANTs subprocesses.
+    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: inherited from the pipeline process
+        (set once by run_pipeline via parallelism.apply_ants_threads); falls back
+        to 1 thread when the function is used outside the pipeline.
     ANTS_RANDOM_SEED: reproducibility
     """
     env = os.environ.copy()
-    env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = "1"
+    env.setdefault("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", "1")
     env["ANTS_RANDOM_SEED"] = "42"
     return env
 
@@ -405,7 +407,19 @@ def run_registration(
             f"See log file : {log_file}"
         )
 
-    # Vérifie que les fichiers de sortie sont bien là et lisibles
+    if "Exception caught" in Path(log_file).read_text(errors="ignore"):
+        for end in (
+            "_warped.nii.gz",
+            "_inv_warped.nii.gz",
+            "0GenericAffine.mat",
+            "1Warp.nii.gz",
+            "1InverseWarp.nii.gz",
+        ):
+            (out_prefix.parent / f"{out_prefix.name}{end}").unlink(missing_ok=True)
+        raise RuntimeError(
+            f"antsRegistration reported an ITK exception (exit code 0). See log file : {log_file}"
+        )
+
     warped = out_prefix.parent / f"{out_prefix.name}_warped.nii.gz"
     _verify_nifti(warped)
 

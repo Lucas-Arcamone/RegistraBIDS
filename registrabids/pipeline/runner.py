@@ -18,7 +18,12 @@ from registrabids.pipeline.registration import (
 )
 from registrabids.core.template import TemplateLoader
 from registrabids.pipeline.preprocessing import run_preprocessing_plan
-from registrabids.core.parallelism import resolve_parallelism, run_session_parallel
+from registrabids.core.parallelism import (
+    resolve_parallelism,
+    resolve_ants_threads,
+    apply_ants_threads,
+    run_session_parallel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +221,10 @@ def run_pipeline(
     # (Joblib) Parallelism
     n_sessions, n_workers = resolve_parallelism(config)
 
+    # ANTs/ITK threads : exported once, before any joblib worker is spawned,
+    # so that every ANTs subprocess (registration, antsAI, N4, apply) inherits it.
+    apply_ants_threads(resolve_ants_threads(config, n_sessions))
+
     index = BIDSIndex(bids_root)
     resolver = ReferenceResolver(index.layout)
 
@@ -246,6 +255,7 @@ def run_pipeline(
             source_map=source_map,
             preproc_config=preproc_config,
             interpolator=config["registration"].get("interpolator", "Linear"),
+            source_overrides=config["registration"].get("source_overrides"),
         )
 
         session_plans.append(plan)

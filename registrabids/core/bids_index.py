@@ -113,7 +113,7 @@ class BIDSIndex:
                         src_path,
                     )
                 resolved.append(str(src_path))
-            mapping[f.path] = list(set(srcs))
+            mapping[f.path] = list(dict.fromkeys(resolved))
 
         logger.debug("%d qmap(s) with extracted sources", len(mapping))
         return mapping

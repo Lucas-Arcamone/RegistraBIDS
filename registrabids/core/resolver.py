@@ -152,6 +152,7 @@ class RegistrationPlanner:
         source_map: dict,  # {qmap_path: [source_path, ...]}
         preproc_config: dict,
         interpolator: str = "Linear",
+        source_overrides: list | None = None,
     ) -> SessionPlan:
         """
         Build the complete plan for a (sub, ses):
@@ -185,6 +186,12 @@ class RegistrationPlanner:
         for bids_file in qmri_files:
             qmap_path = bids_file.path
             sources = source_map.get(qmap_path, [])
+
+            override = self._override_source(
+                subject, session, bids_file, source_overrides
+            )
+            if override is not None:
+                sources = [str(override)]
 
             if not sources:
                 logger.warning(
@@ -245,6 +252,36 @@ class RegistrationPlanner:
             )
         self._log_plan(plan)
         return plan
+
+    def _override_source(self, subject, session, bids_file, rules) -> Path | None:
+        """
+        registration.source_overrides : registers the qmaps matching `match` through
+        the raw image matching `source` instead of the first entry of their "Sources".
+        """
+        if not rules:
+            return None
+        entities = bids_file.get_entities()
+        for rule in rules:
+            if all(entities.get(k) == v for k, v in rule.get("match", {}).items()):
+                hits = self.layout.get(
+                    subject=subject,
+                    session=session,
+                    scope="raw",
+                    extension=[".nii", ".nii.gz"],
+                    **rule["source"],
+                )
+                if len(hits) != 1:
+                    raise ValueError(
+                        f"source_overrides : {len(hits)} file(s) match {rule['source']} "
+                        f"for sub-{subject} ses-{session} (exactly 1 expected)."
+                    )
+                logger.info(
+                    "Source override : %s -> %s",
+                    Path(bids_file.path).name,
+                    hits[0].filename,
+                )
+                return Path(hits[0].path)
+        return None
 
     def _log_plan(self, plan: SessionPlan) -> None:
         logger.info(
