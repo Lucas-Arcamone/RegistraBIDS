@@ -290,11 +290,26 @@ parallelism:
   n_workers: 4   # number of parallel tasks within each session
 ```
 
-ANTs threads are allocated automatically: `available_CPUs / (n_sessions × n_workers)`.
+Each ANTs process (antsRegistration, antsAI, N4BiasFieldCorrection, antsApplyTransforms)
+uses `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` threads, resolved once at start-up:
 
-For example, with 32 CPUs, `n_sessions: 2` and `n_workers: 4`:
-- 2 × 4 = 8 ANTs processes run simultaneously
-- Each ANTs process receives 32 / 8 = **4 threads**
+1. `parallelism.ants_threads` in the YAML, if set;
+2. otherwise `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` if already exported (e.g. in a Slurm script);
+3. otherwise `available_CPUs / n_sessions`.
+
+```yaml
+parallelism:
+  n_sessions: 1
+  n_workers: 4      # parallel tasks within each session
+  ants_threads: 8   # threads per ANTs process (optional)
+```
+
+Note that the `n_workers` ANTs processes of a session share the session's CPUs. With
+`n_workers: 4` and `ants_threads: 8` on 8 CPUs, the CPUs are oversubscribed while the
+source → reference registrations (Rigid/Affine, short) run next to the reference → template
+SyN; once they finish, the SyN uses all 8 threads. This is usually the best trade-off,
+because the SyN dominates the run time. To avoid any oversubscription, set
+`ants_threads = available_CPUs / (n_sessions × n_workers)` instead, at the cost of a slower SyN.
 
 To disable parallelism entirely (useful for debugging):
 
@@ -302,29 +317,11 @@ To disable parallelism entirely (useful for debugging):
 parallelism:
   disabled: true
 ```
-If no `parallelism` block is specified in the configuration file, the pipeline
-automatically detects the available CPUs and defaults to:
 
-- `n_sessions = 1` — one session at a time
-- `n_workers = available_CPUs` — all CPUs allocated to parallel tasks within the session
+If no `parallelism` block is specified, the pipeline defaults to `n_sessions = 1`,
+`n_workers = available_CPUs` and `ants_threads = available_CPUs`.
 
-Each ANTs process then receives `available_CPUs / n_workers = 1` thread.
-While this default maximizes intra-session parallelism, it is not optimal for
-the SyN registration step between the reference and the template, which is
-computationally intensive and benefits from multi-threading.
-
-For better performance, we recommend explicitly setting `n_workers` to the number
-of independent registration jobs (typically 2–4) so that each ANTs process
-receives more threads:
-
-```yaml
-parallelism:
-  n_sessions: 1
-  n_workers: 3   # ref→template + source_A→ref + source_B→ref
-```
-
-With 32 CPUs and `n_workers: 3`, each ANTs process receives `32 / 3 ≈ 10` threads,
-significantly accelerating the SyN step.
+On Slurm, `available_CPUs` is the job allocation (`os.sched_getaffinity`), e.g. `--cpus-per-task`.
 
 ### Configuration reference
 
@@ -341,7 +338,7 @@ significantly accelerating the SyN step.
 | `preprocessing.volume_extraction` | ❌ | Apply the extraction strategy to files that match BIDS sidecars. Available strategies: `mean`, `geometric_mean_shell`, `weighted_mean_echo` and `first_volume`. If absent, use `first_volume` strategy. |
 | `preprocessing.n4` | ❌ | Apply N4 bias field correction (ANTS) |
 | `preprocessing.denoising` | ❌ | Apply choosen denoising algrorithm. Available algorithms: MPPCA and NLMF (DIPY) |
-| `parallelism` | ❌ | Controls parallel execution. `n_sessions`: number of sessions running simultaneously. `n_workers`: number of parallel tasks within each session. If absent, defaults to `n_sessions=1` and `n_workers=available_CPUs` (see **Parallelism management**) |
+| `parallelism` | ❌ | Controls parallel execution. `n_sessions`: number of sessions running simultaneously. `n_workers`: number of parallel tasks within each session. `ants_threads`: threads per ANTs process. If absent, defaults to `n_sessions=1`, `n_workers=available_CPUs`, `ants_threads=available_CPUs / n_sessions` (see **Parallelism management**) |
 ---
 
 

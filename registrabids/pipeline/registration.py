@@ -205,12 +205,14 @@ def _build_command(
 
 def _ants_env() -> dict:
     """
-    Environment variables to force gzip compression in ANTs output.
-    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: stability
+    Environment for ANTs subprocesses.
+    ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: inherited from the pipeline process
+        (set once by run_pipeline via parallelism.apply_ants_threads); falls back
+        to 1 thread when the function is used outside the pipeline.
     ANTS_RANDOM_SEED: reproducibility
     """
     env = os.environ.copy()
-    env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = "1"
+    env.setdefault("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", "1")
     env["ANTS_RANDOM_SEED"] = "42"
     return env
 

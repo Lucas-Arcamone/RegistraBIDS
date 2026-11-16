@@ -27,6 +27,9 @@ def resolve_parallelism(config: dict) -> tuple[int, int]:
     1. disabled: true  → sequential (1, 1)
     2. Explicit values in the YAML
     3. Automatic based on allocated CPUs (Slurm-aware via sched_getaffinity)
+
+    The number of threads per ANTs process is resolved separately
+    (see resolve_ants_threads).
     """
     parallelism_cfg = config.get("parallelism", {})
 
@@ -55,6 +58,67 @@ def resolve_parallelism(config: dict) -> tuple[int, int]:
         n_workers,
     )
     return n_sessions, n_workers
+
+
+def resolve_ants_threads(config: dict, n_sessions: int) -> int:
+    """
+    Number of threads given to every ANTs/ITK process (antsRegistration, antsAI,
+    N4BiasFieldCorrection, antsApplyTransforms, ResampleImage).
+
+    Priority:
+    1. ``parallelism.ants_threads`` in the YAML (positive integer)
+    2. ``ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`` already set in the environment
+       (e.g. exported by a Slurm job script)
+    3. Automatic: available CPUs / n_sessions, i.e. each session gets its share
+       of the allocation and every ANTs process of that session may use all of it.
+       Within a session, the ``n_workers`` processes therefore oversubscribe the
+       CPUs while they overlap (typically the short Rigid/Affine source->ref jobs
+       running next to the SyN); once they finish, the SyN gets all the threads.
+    """
+    parallelism_cfg = config.get("parallelism", {}) or {}
+
+    explicit = parallelism_cfg.get("ants_threads")
+    if explicit is not None:
+        n = int(explicit)
+        if n < 1:
+            raise ValueError(f"parallelism.ants_threads must be >= 1 (got {explicit}).")
+        logger.info("ANTs threads : %d (parallelism.ants_threads).", n)
+        return n
+
+    env_value = os.environ.get("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS")
+    if env_value:
+        try:
+            n = int(env_value)
+            if n >= 1:
+                logger.info(
+                    "ANTs threads : %d (ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS from environment).",
+                    n,
+                )
+                return n
+        except ValueError:
+            pass
+        logger.warning(
+            "Ignoring invalid ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=%r.", env_value
+        )
+
+    available = _available_cpus()
+    n = max(1, available // max(1, n_sessions))
+    logger.info(
+        "ANTs threads : %d (automatic : %d CPU(s) / %d session(s)).",
+        n,
+        available,
+        n_sessions,
+    )
+    return n
+
+
+def apply_ants_threads(n_threads: int) -> None:
+    """
+    Export the thread count in the current process environment.
+    Must be called BEFORE the first joblib Parallel call: loky workers and every
+    ANTs subprocess inherit os.environ, so all ANTs calls get the same value.
+    """
+    os.environ["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(int(n_threads))
 
 
 def _available_cpus() -> int:
