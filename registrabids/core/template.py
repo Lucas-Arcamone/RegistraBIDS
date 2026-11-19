@@ -128,7 +128,8 @@ class TemplateLoader:
             raise ValueError(
                 "The `template` block in the YAML file must contain an `atlas` key."
             )
-        return cls().load(atlas_name)
+        resources_dir = config.get("resources_dir")
+        return cls(Path(resources_dir) if resources_dir else None).load(atlas_name)
 
     # ─────────────────────────────────────────
     # Helpers (private)
